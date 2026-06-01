@@ -1,0 +1,53 @@
+# DeepSeek 健康管理系统 - AI模型配置
+
+deepseek:
+  api_key: "your-api-key-here"
+  api_url: "https://api.deepseek.com"
+  model: "deepseek-chat"
+
+models:
+  blood_sugar:
+    name: "blood_sugar_model"
+    version: "1.0.0"
+    input_dim: 10
+    hidden_dims: [64, 32]
+    output_dim: 1
+    learning_rate: 0.001
+    epochs: 100
+    batch_size: 32
+
+  risk_assessment:
+    name: "risk_assessment_model"
+    version: "1.0.0"
+    input_dim: 15
+    hidden_dims: [128, 64, 32]
+    output_dim: 3
+    learning_rate: 0.001
+    epochs: 100
+    batch_size: 32
+
+  image_recognition:
+    name: "image_recognition_model"
+    version: "1.0.0"
+    input_shape: [224, 224, 3]
+    num_classes: 10
+    learning_rate: 0.0001
+    epochs: 50
+    batch_size: 16
+
+data:
+  raw_dir: "../data/raw"
+  processed_dir: "../data/processed"
+  models_dir: "../data/models"
+
+  train_ratio: 0.8
+  val_ratio: 0.1
+  test_ratio: 0.1
+
+logging:
+  level: "INFO"
+  file: "logs/training.log"
+
+server:
+  host: "0.0.0.0"
+  port: 5000
