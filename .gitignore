@@ -1,4 +1,32 @@
-# Project specific
-1
+# === 项目文件忽略规则 ===
+
+# 本地开发工具和配置（不提交到Git）
+.opencode/
+temp/
+LOCAL_WORK_SUMMARY.md
+
+# Node.js
+node_modules/
+package-lock.json
+
+# 备份文件
 *.bak
+~$*
+
+# 临时文件
+*.tmp
+*.log
+
+# 旧项目文件
 基于图像特征识别的宠物领养平台需求调研报告.md
+
+# === 以下文件应该提交到Git ===
+# PROJECT_WORK_SUMMARY.md
+# HEALTH_MANAGEMENT_RESEARCH.md
+# HEALTH_MANAGEMENT_SRS.md
+# PROJECT_START_REPORT.md
+# SOFTWARE_PROJECT_PLANNING.md
+# SYSTEM_ARCHITECTURE.md
+# README.md
+# docs/
+# *.docx

@@ -1,0 +1,40 @@
+@startuml
+skinparam defaultFontName "SimHei"
+skinparam defaultFontSize 14
+skinparam backgroundColor white
+
+title 血糖管理智能体 - 活动图
+
+start
+:用户进入血糖管理页面;
+:系统显示血糖记录列表;
+
+if (选择操作？) then (录入数据)
+  :填写血糖数据（时间、值、餐前/餐后）;
+  :系统验证数据格式;
+  if (数据格式正确？) then (是)
+    :保存血糖记录到数据库;
+    :系统更新血糖趋势分析;
+    :显示录入成功提示;
+  else (否)
+    :显示数据格式错误提示;
+    :返回录入页面;
+  endif
+elseif (查看趋势) then
+  :选择时间范围（日/周/月）;
+  :系统查询血糖数据;
+  :生成血糖趋势图表;
+  :显示趋势分析结果;
+elseif (获取建议) then
+  :系统分析血糖数据;
+  :调用AI生成饮食处方;
+  :显示个性化饮食建议;
+else (导出报告)
+  :选择导出时间范围;
+  :系统生成血糖报告;
+  :下载报告文件;
+endif
+
+:用户退出血糖管理页面;
+stop
+@enduml

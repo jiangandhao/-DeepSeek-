@@ -1,0 +1,61 @@
+@startuml
+skinparam defaultFontName "SimHei"
+skinparam defaultFontSize 14
+
+actor "普通用户" as U
+actor "健康管理人员" as H
+actor "管理员" as A
+
+rectangle "基于DeepSeek的全流程健康管理系统" {
+  usecase "用户注册" as UC1
+  usecase "用户登录" as UC2
+  usecase "管理健康档案" as UC3
+  usecase "录入血糖数据" as UC4
+  usecase "查看血糖趋势" as UC5
+  usecase "获取饮食处方" as UC6
+  usecase "AI健康咨询" as UC7
+  usecase "查看对话历史" as UC8
+  usecase "上传体检报告" as UC9
+  usecase "查看报告解读" as UC10
+  usecase "获取体检推荐" as UC11
+  usecase "查看风险评估" as UC12
+  usecase "接收预警通知" as UC13
+  usecase "管理用户" as UC14
+  usecase "系统配置" as UC15
+  usecase "查看数据统计" as UC16
+
+  U --> UC1
+  U --> UC2
+  U --> UC3
+  U --> UC4
+  U --> UC5
+  U --> UC7
+  U --> UC9
+  U --> UC10
+  U --> UC12
+
+  H --> UC2
+  H --> UC3
+  H --> UC4
+  H --> UC5
+  H --> UC6
+  H --> UC7
+  H --> UC8
+  H --> UC9
+  H --> UC10
+  H --> UC11
+  H --> UC12
+  H --> UC13
+  H --> UC16
+
+  A --> UC2
+  A --> UC14
+  A --> UC15
+  A --> UC16
+
+  UC4 ..> UC5 : <<include>>
+  UC5 ..> UC6 : <<include>>
+  UC9 ..> UC10 : <<include>>
+  UC12 ..> UC13 : <<include>>
+}
+@enduml

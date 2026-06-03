@@ -1,0 +1,40 @@
+@startuml
+skinparam defaultFontName "SimHei"
+skinparam defaultFontSize 14
+
+title AI数智健管师 - 活动图
+
+start
+:用户进入AI健管师页面;
+:系统加载对话历史;
+
+:用户输入健康问题;
+:系统接收用户消息;
+
+:系统调用DeepSeek API;
+:AI分析用户问题;
+:AI生成健康建议;
+
+if (需要健康数据？) then (是)
+  :系统查询用户健康档案;
+  :系统查询血糖数据;
+  :系统查询体检报告;
+  :AI结合健康数据生成个性化建议;
+else (否)
+  :AI生成通用健康建议;
+endif
+
+:系统返回AI回复;
+:系统保存对话记录;
+:界面显示AI回复;
+
+if (用户满意？) then (是)
+  :用户结束对话;
+else (否)
+  :用户继续提问;
+  -> 用户输入健康问题;
+endif
+
+:用户退出AI健管师页面;
+stop
+@enduml
