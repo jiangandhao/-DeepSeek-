@@ -1,32 +1,42 @@
-# === 项目文件忽略规则 ===
-实训个人周报--姜昊-2301.doc
-# 本地开发工具和配置（不提交到Git）
-.opencode/
-temp/
-LOCAL_WORK_SUMMARY.md
-
-# Node.js
-node_modules/
-package-lock.json
-
-# 备份文件
-*.bak
-~$*
-
-# 临时文件
-*.tmp
+# ---- 通用 ----
+.env
 *.log
+.DS_Store
+.idea/
+.vscode/
+*.iml
 
-# 旧项目文件
-基于图像特征识别的宠物领养平台需求调研报告.md
+# ---- Java / Maven ----
+backend/target/
+backend/.mvn/
+backend/!.mvn/wrapper/maven-wrapper.jar
+backend/HELP.md
 
-# === 以下文件应该提交到Git ===
-# PROJECT_WORK_SUMMARY.md
-# HEALTH_MANAGEMENT_RESEARCH.md
-# HEALTH_MANAGEMENT_SRS.md
-# PROJECT_START_REPORT.md
-# SOFTWARE_PROJECT_PLANNING.md
-# SYSTEM_ARCHITECTURE.md
-# README.md
-# docs/
-# *.docx
+# ---- Node / Vue ----
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-error.log*
+
+# ---- Python ----
+ai-service/__pycache__/
+ai-service/**/__pycache__/
+ai-service/.venv/
+ai-service/venv/
+*.pyc
+ai-service/.pytest_cache/
+ai-service/chroma_db/
+ai-service/.ipynb_checkpoints/
+
+# ---- 压测 / 测试产物 ----
+*.jtl
+deploy/report/
+ai-service/.pytest_cache/
+ai-service/tests/__pycache__/
+
+# ---- 数据 / 模型产物 ----
+ai-service/data/*.csv
+!ai-service/data/.gitkeep
+ai-service/**/*.pt
+ai-service/**/*.pkl
