@@ -108,4 +108,14 @@ public class HealthManagerController {
     public Result<List<Map<String, String>>> getAiAdvice(@PathVariable Long userId) {
         return Result.success(healthManagerService.getAiAdvice(userId));
     }
+
+    /**
+     * 获取体重趋势数据
+     */
+    @GetMapping("/weight-trend/{userId}")
+    public Result<Map<String, Object>> getWeightTrend(
+            @PathVariable Long userId,
+            @RequestParam(defaultValue = "7d") String period) {
+        return Result.success(healthManagerService.getWeightTrend(userId, period));
+    }
 }

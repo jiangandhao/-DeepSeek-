@@ -23,7 +23,7 @@
                   <el-table-column prop="duration" label="时长" width="100" />
                   <el-table-column prop="intensity" label="强度" width="100">
                     <template #default="{ row }">
-                      <el-tag :type="getIntensityType(row.intensity)">{{ row.intensity }}</el-tag>
+                      <el-tag :type="getIntensityType(row.intensity)">{{ getIntensityLabel(row.intensity) }}</el-tag>
                     </template>
                   </el-table-column>
                   <el-table-column prop="note" label="注意事项" />
@@ -118,6 +118,7 @@
               <p>{{ goal.target }}</p>
               <el-progress :percentage="goal.progress" :show-text="false" />
             </div>
+            <el-button size="small" type="primary" @click="updateGoalProgress(goal)">更新进度</el-button>
           </div>
         </el-card>
 
@@ -140,77 +141,90 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { MagicStick, CircleCheck, Warning, Timer } from '@element-plus/icons-vue'
+import { ref, onMounted } from 'vue'
+import { MagicStick } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { getPreventionPlan, generatePreventionPlan as generatePreventionPlanApi, getHealthGoals, updateHealthGoal as updateHealthGoalApi, getHealthAdvice } from '@/api/riskWarning'
+import { useUserStore } from '@/stores/user'
 
+const userStore = useUserStore()
 const loading = ref(false)
 const activePlan = ref(['exercise'])
 
-const exercisePlan = ref([
-  { type: '快走/慢跑', frequency: '每周5次', duration: '30分钟', intensity: '中等', note: '饭后1小时进行' },
-  { type: '力量训练', frequency: '每周2次', duration: '20分钟', intensity: '低', note: '以轻重量为主' },
-  { type: '瑜伽/拉伸', frequency: '每周3次', duration: '15分钟', intensity: '低', note: '睡前进行有助于睡眠' }
-])
+const exercisePlan = ref([])
+const dietPrinciples = ref([])
+const nutritionTargets = ref([])
+const medications = ref([])
+const checkupSchedule = ref([])
+const mentalAdvice = ref([])
+const progress = ref([])
+const healthGoals = ref([])
+const expertAdvice = ref('')
 
-const dietPrinciples = ref([
-  '控制总热量摄入，每日不超过1800千卡',
-  '减少精制碳水，增加全谷物摄入',
-  '增加蔬菜水果摄入，每日500g以上',
-  '限制盐分摄入，每日不超过6g',
-  '减少饱和脂肪，增加不饱和脂肪酸',
-  '定时定量，避免暴饮暴食'
-])
+const loadPlan = async () => {
+  try {
+    const res = await getPreventionPlan(userStore.userId)
+    if (res.data) {
+      const data = res.data
+      exercisePlan.value = data.exercisePlan || []
+      dietPrinciples.value = data.dietPrinciples || []
+      nutritionTargets.value = data.nutritionTargets || []
+      medications.value = data.medications || []
+      checkupSchedule.value = data.checkupSchedule || []
+      mentalAdvice.value = data.mentalAdvice || []
+      progress.value = data.progress || []
+    }
+  } catch (error) {
+    console.error('加载预防方案失败:', error)
+  }
+}
 
-const nutritionTargets = ref([
-  { name: '热量', value: 1800, unit: '千卡' },
-  { name: '蛋白质', value: 70, unit: 'g' },
-  { name: '碳水', value: 225, unit: 'g' },
-  { name: '脂肪', value: 50, unit: 'g' }
-])
+const loadGoals = async () => {
+  try {
+    const res = await getHealthGoals(userStore.userId)
+    healthGoals.value = res.data || []
+  } catch (error) {
+    console.error('加载健康目标失败:', error)
+  }
+}
 
-const medications = ref([
-  { name: '二甲双胍', purpose: '控制血糖', dosage: '500mg', frequency: '每日2次', sideEffects: '可能出现胃肠不适' },
-  { name: '阿托伐他汀', purpose: '调节血脂', dosage: '20mg', frequency: '每晚1次', sideEffects: '定期检查肝功能' }
-])
-
-const checkupSchedule = ref([
-  { id: 1, date: '2025-01-25', title: '心血管科复查', description: '血压监测、心电图检查', urgent: true },
-  { id: 2, date: '2025-02-15', title: '内分泌科复查', description: '血糖、糖化血红蛋白检查', urgent: false },
-  { id: 3, date: '2025-03-01', title: '血脂复查', description: '血脂全套检查', urgent: false },
-  { id: 4, date: '2025-06-01', title: '年度体检', description: '全面体检', urgent: false }
-])
-
-const mentalAdvice = ref([
-  { title: '压力管理', content: '学习深呼吸和冥想技巧，每天10分钟', color: '#409EFF', icon: 'Timer' },
-  { title: '规律作息', content: '保持固定的睡眠时间，每晚7-8小时', color: '#67C23A', icon: 'CircleCheck' },
-  { title: '社交活动', content: '保持适度社交，避免孤独感', color: '#E6A23C', icon: 'Warning' }
-])
-
-const progress = ref([
-  { name: '运动计划', completed: 4, total: 7, color: '#67C23A' },
-  { name: '饮食控制', completed: 5, total: 7, color: '#409EFF' },
-  { name: '用药依从', completed: 7, total: 7, color: '#67C23A' },
-  { name: '血糖监测', completed: 6, total: 7, color: '#E6A23C' }
-])
-
-const healthGoals = ref([
-  { name: '血糖达标', target: '空腹<6.1mmol/L', progress: 60, status: 'in-progress', icon: 'Timer' },
-  { name: '体重控制', target: 'BMI<24', progress: 40, status: 'in-progress', icon: 'Timer' },
-  { name: '血压稳定', target: '<130/85mmHg', progress: 80, status: 'good', icon: 'CircleCheck' }
-])
-
-const expertAdvice = ref('根据您的健康数据，建议重点关注血糖控制和体重管理。近期血糖波动较大，建议减少精制碳水摄入，增加膳食纤维。同时，每周至少进行150分钟中等强度有氧运动，有助于改善胰岛素敏感性。')
+const loadAdvice = async () => {
+  try {
+    const res = await getHealthAdvice(userStore.userId)
+    expertAdvice.value = res.data || ''
+  } catch (error) {
+    console.error('加载健康建议失败:', error)
+  }
+}
 
 const getIntensityType = (intensity) => {
-  const map = { '低': 'success', '中等': 'warning', '高': 'danger' }
+  const map = { 'low': 'success', 'medium': 'warning', 'high': 'danger' }
   return map[intensity] || 'info'
+}
+
+const getIntensityLabel = (intensity) => {
+  const map = { 'low': '低', 'medium': '中', 'high': '高' }
+  return map[intensity] || intensity
+}
+
+const updateGoalProgress = async (goal) => {
+  try {
+    await updateHealthGoalApi(userStore.userId, goal.id, {
+      progress: goal.progress,
+      status: goal.status,
+      currentValue: goal.currentValue
+    })
+    ElMessage.success('目标进度已更新')
+  } catch (error) {
+    console.error('更新目标进度失败:', error)
+  }
 }
 
 const generatePlan = async () => {
   loading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    await generatePreventionPlanApi({ userId: userStore.userId })
+    await loadPlan()
     ElMessage.success('预防方案生成成功')
   } catch (error) {
     ElMessage.error('生成失败')
@@ -218,6 +232,16 @@ const generatePlan = async () => {
     loading.value = false
   }
 }
+
+onMounted(async () => {
+  // 等待用户信息加载完成
+  if (!userStore.userId && userStore.token) {
+    await userStore.fetchUserInfo()
+  }
+  loadPlan()
+  loadGoals()
+  loadAdvice()
+})
 </script>
 
 <style scoped>

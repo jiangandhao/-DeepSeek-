@@ -46,7 +46,7 @@
             <el-table-column prop="disease" label="疾病类型" width="150" />
             <el-table-column prop="level" label="风险等级" width="100">
               <template #default="{ row }">
-                <el-tag :type="getLevelType(row.level)">{{ row.level }}</el-tag>
+                <el-tag :type="getLevelType(row.level)">{{ getLevelLabel(row.level) }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="probability" label="患病概率" width="120">
@@ -99,73 +99,79 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Refresh, WarningFilled, Warning, CircleCheckFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { getRiskAssessment, getRiskLevels, getRiskFactors } from '@/api/riskWarning'
+import { useUserStore } from '@/stores/user'
+
+const userStore = useUserStore()
 
 const riskStats = ref({
-  high: 1,
-  medium: 2,
-  low: 5
+  high: 0,
+  medium: 0,
+  low: 0
 })
 
-const diseaseRisks = ref([
-  {
-    disease: '2型糖尿病',
-    level: '高风险',
-    probability: 75,
-    factors: ['血糖偏高', '家族史', 'BMI偏高', '缺乏运动']
-  },
-  {
-    disease: '心血管疾病',
-    level: '中风险',
-    probability: 45,
-    factors: ['血脂异常', '轻度肥胖', '吸烟史']
-  },
-  {
-    disease: '高血压',
-    level: '中风险',
-    probability: 40,
-    factors: ['血压偏高', '高盐饮食', '压力大']
-  },
-  {
-    disease: '脂肪肝',
-    level: '低风险',
-    probability: 25,
-    factors: ['ALT轻度升高', '饮酒']
-  },
-  {
-    disease: '骨质疏松',
-    level: '低风险',
-    probability: 15,
-    factors: ['年龄', '缺乏钙摄入']
-  }
-])
+const diseaseRisks = ref([])
 
-const riskFactors = ref([
-  { name: '血糖水平', impact: 85, controllable: true, color: '#F56C6C', description: '空腹血糖6.8，高于正常值' },
-  { name: 'BMI指数', impact: 70, controllable: true, color: '#E6A23C', description: 'BMI 25.4，属于超重范围' },
-  { name: '家族病史', impact: 60, controllable: false, color: '#909399', description: '父母有糖尿病史' },
-  { name: '运动习惯', impact: 45, controllable: true, color: '#67C23A', description: '每周运动不足2次' }
-])
+const riskFactors = ref([])
 
 const getLevelType = (level) => {
-  const map = { '高风险': 'danger', '中风险': 'warning', '低风险': 'success' }
+  const map = { 'high': 'danger', 'medium': 'warning', 'low': 'success' }
   return map[level] || 'info'
 }
 
 const getLevelColor = (level) => {
-  const map = { '高风险': '#F56C6C', '中风险': '#E6A23C', '低风险': '#67C23A' }
+  const map = { 'high': '#F56C6C', 'medium': '#E6A23C', 'low': '#67C23A' }
   return map[level] || '#909399'
 }
 
-const refreshData = () => {
+const getLevelLabel = (level) => {
+  const map = { 'high': '高', 'medium': '中', 'low': '低' }
+  return map[level] || level
+}
+
+const loadData = async () => {
+  try {
+    const [assessmentRes, levelsRes, factorsRes] = await Promise.all([
+      getRiskAssessment(userStore.userId),
+      getRiskLevels(userStore.userId),
+      getRiskFactors(userStore.userId)
+    ])
+
+    if (assessmentRes.data) {
+      diseaseRisks.value = assessmentRes.data.diseases || []
+    }
+
+    if (levelsRes.data) {
+      riskStats.value = levelsRes.data.stats || riskStats.value
+    }
+
+    if (factorsRes.data) {
+      riskFactors.value = factorsRes.data || []
+    }
+  } catch (error) {
+    console.error('加载风险数据失败:', error)
+  }
+}
+
+const refreshData = async () => {
+  await loadData()
   ElMessage.success('数据已刷新')
 }
 
 const viewDetail = (row) => {
   ElMessage.info(`查看 ${row.disease} 详情`)
 }
+
+onMounted(async () => {
+  // 等待用户信息加载完成
+  if (!userStore.userId && userStore.token) {
+    await userStore.fetchUserInfo()
+  }
+  loadData()
+})
 </script>
 
 <style scoped>

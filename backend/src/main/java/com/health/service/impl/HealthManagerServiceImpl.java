@@ -8,7 +8,9 @@ import com.health.service.HealthManagerService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
@@ -37,7 +39,6 @@ public class HealthManagerServiceImpl implements HealthManagerService {
         // 模拟AI风险评估逻辑
         Map<String, Object> result = new HashMap<>();
 
-        int age = (int) assessmentData.getOrDefault("age", 30);
         double bmi = Double.parseDouble(assessmentData.getOrDefault("bmi", "24").toString());
         double bloodSugar = Double.parseDouble(assessmentData.getOrDefault("bloodSugar", "5.6").toString());
 
@@ -119,9 +120,6 @@ public class HealthManagerServiceImpl implements HealthManagerService {
         // 模拟AI生成运动方案
         Map<String, Object> plan = new HashMap<>();
 
-        String level = params.getOrDefault("level", "intermediate").toString();
-        String goal = params.getOrDefault("goal", "general").toString();
-
         List<Map<String, Object>> weeklyPlan = new ArrayList<>();
         weeklyPlan.add(createDayPlan("周一", "有氧", "45分钟", 350));
         weeklyPlan.add(createDayPlan("周二", "力量", "60分钟", 280));
@@ -189,6 +187,43 @@ public class HealthManagerServiceImpl implements HealthManagerService {
         advice.add(createAdvice("建议每周至少进行150分钟中等强度有氧运动", "#409EFF"));
         advice.add(createAdvice("血压偶有波动，注意情绪管理和规律作息", "#E6A23C"));
         return advice;
+    }
+
+    @Override
+    public Map<String, Object> getWeightTrend(Long userId, String period) {
+        // 获取用户的健康档案
+        HealthProfile profile = healthProfileMapper.selectByUserId(userId);
+        double currentWeight = (profile != null && profile.getWeight() != null) ? profile.getWeight() : 70.0;
+
+        // 生成日期列表
+        LocalDate today = LocalDate.now();
+        LocalDate startDate;
+        if ("30d".equals(period)) {
+            startDate = today.minusDays(29);
+        } else {
+            startDate = today.minusDays(6);
+        }
+
+        List<String> dates = new ArrayList<>();
+        List<Double> weights = new ArrayList<>();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM-dd");
+
+        // 生成模拟的体重数据（基于当前体重的小幅波动）
+        Random random = new Random(userId); // 使用 userId 作为种子，保证同一用户数据一致
+        for (LocalDate date = startDate; !date.isAfter(today); date = date.plusDays(1)) {
+            dates.add(date.format(formatter));
+            // 模拟每天体重在 ±0.5kg 范围内波动
+            double fluctuation = (random.nextDouble() - 0.5) * 1.0;
+            weights.add(Math.round((currentWeight + fluctuation) * 10.0) / 10.0);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("dates", dates);
+        result.put("weights", weights);
+        result.put("current", currentWeight);
+        result.put("target", 65.0); // 目标体重
+
+        return result;
     }
 
     // 辅助方法

@@ -62,4 +62,9 @@ public interface HealthManagerService {
      * 获取AI健康建议
      */
     List<Map<String, String>> getAiAdvice(Long userId);
+
+    /**
+     * 获取体重趋势数据
+     */
+    Map<String, Object> getWeightTrend(Long userId, String period);
 }

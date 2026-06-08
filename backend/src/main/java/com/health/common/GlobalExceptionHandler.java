@@ -9,12 +9,20 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public Result<?> handleException(Exception e) {
         e.printStackTrace();
-        return Result.error(e.getMessage());
+        String message = e.getMessage();
+        if (message == null || message.isEmpty()) {
+            message = e.getClass().getName() + ": " + (e.getCause() != null ? e.getCause().getMessage() : "unknown error");
+        }
+        return Result.error(message);
     }
 
     @ExceptionHandler(RuntimeException.class)
     public Result<?> handleRuntimeException(RuntimeException e) {
         e.printStackTrace();
-        return Result.error(e.getMessage());
+        String message = e.getMessage();
+        if (message == null || message.isEmpty()) {
+            message = e.getClass().getName() + ": " + (e.getCause() != null ? e.getCause().getMessage() : "unknown error");
+        }
+        return Result.error(message);
     }
 }

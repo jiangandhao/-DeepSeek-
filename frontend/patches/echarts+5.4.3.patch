@@ -1,0 +1,31 @@
+diff --git a/node_modules/echarts/lib/chart/line/LineView.js b/node_modules/echarts/lib/chart/line/LineView.js
+--- a/node_modules/echarts/lib/chart/line/LineView.js
++++ b/node_modules/echarts/lib/chart/line/LineView.js
+@@ -558,6 +558,9 @@
+   LineView.prototype.render = function (seriesModel, ecModel, api) {
+     var _this = this;
+
+     var coordSys = seriesModel.coordinateSystem;
++    if (!coordSys) {
++      return;
++    }
+     var group = this.group;
+     var data = seriesModel.getData();
+@@ -887,7 +890,7 @@
+   LineView.prototype._changePolyState = function (toState) {
+     var polygon = this._polygon;
+-    setStatesFlag(this._polyline, toState);
++    this._polyline && setStatesFlag(this._polyline, toState);
+     polygon && setStatesFlag(polygon, toState);
+   };
+diff --git a/node_modules/echarts/lib/util/states.js b/node_modules/echarts/lib/util/states.js
+--- a/node_modules/echarts/lib/util/states.js
++++ b/node_modules/echarts/lib/util/states.js
+@@ -152,6 +152,9 @@
+ export function setStatesFlag(el, stateName) {
++  if (!el) {
++    return;
++  }
+   switch (stateName) {
+     case 'emphasis':
+       el.hoverState = HOVER_STATE_EMPHASIS;

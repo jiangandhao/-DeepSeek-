@@ -40,11 +40,11 @@ export function createAppointment(data) {
   })
 }
 
-export function getAppointments(params) {
+export function getAppointments(userId, params) {
   return request({
     url: '/checkup/appointments',
     method: 'get',
-    params
+    params: { userId, ...params }
   })
 }
 
@@ -63,11 +63,11 @@ export function cancelAppointment(id) {
 }
 
 // 体检报告相关
-export function getReports(params) {
+export function getReports(userId) {
   return request({
     url: '/checkup/reports',
     method: 'get',
-    params
+    params: { userId }
   })
 }
 
@@ -123,9 +123,10 @@ export function getTimeSlots(centerId, date) {
 }
 
 // AI智能推荐
-export function getAiRecommendation() {
+export function getAiRecommendation(userId) {
   return request({
     url: '/checkup/recommendation',
-    method: 'get'
+    method: 'get',
+    params: { userId }
   })
 }

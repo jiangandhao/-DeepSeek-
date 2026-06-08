@@ -91,13 +91,16 @@ public class RiskWarningServiceImpl implements RiskWarningService {
     }
 
     @Override
-    public List<Map<String, Object>> getWarnings(Long userId, String level, Boolean read) {
+    public List<Map<String, Object>> getWarnings(Long userId, String level, Boolean read, Boolean includeDismissed) {
         List<WarningRecord> records = warningRecordMapper.selectByUserId(userId);
         List<Map<String, Object>> warnings = new ArrayList<>();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
         for (WarningRecord record : records) {
+            // 如果不包含已忽略的预警，则跳过
             if (record.getIsDismissed() != null && record.getIsDismissed() == 1) {
-                continue;
+                if (includeDismissed == null || !includeDismissed) {
+                    continue;
+                }
             }
             if (level != null && !level.isEmpty() && !level.equals(record.getWarningLevel())) {
                 continue;
@@ -114,6 +117,7 @@ public class RiskWarningServiceImpl implements RiskWarningService {
             warning.put("title", record.getTitle());
             warning.put("content", record.getContent());
             warning.put("read", record.getIsRead() != null && record.getIsRead() == 1);
+            warning.put("dismissed", record.getIsDismissed() != null && record.getIsDismissed() == 1);
             warning.put("time", record.getCreateTime() != null ? record.getCreateTime().format(formatter) : "");
             warnings.add(warning);
         }
@@ -158,11 +162,12 @@ public class RiskWarningServiceImpl implements RiskWarningService {
         int unreadCount = 0;
         int resolvedCount = 0;
         for (WarningRecord record : records) {
-            boolean isRead = record.getIsRead() != null && record.getIsRead() == 1;
             boolean isDismissed = record.getIsDismissed() != null && record.getIsDismissed() == 1;
-            if (!isRead) {
+            // 未处理 = 未忽略的预警
+            if (!isDismissed) {
                 unreadCount++;
             }
+            // 已处理 = 已忽略的预警
             if (isDismissed) {
                 resolvedCount++;
             }

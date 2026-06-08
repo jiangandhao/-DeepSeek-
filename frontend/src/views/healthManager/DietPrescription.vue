@@ -175,14 +175,17 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onUnmounted, nextTick } from 'vue'
 import { MagicStick, InfoFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { getDietPrescription } from '@/api/healthManager'
+import * as echarts from 'echarts'
 
 const loading = ref(false)
 const activeMeal = ref(['breakfast'])
 const dietPlan = ref(null)
 const nutritionChart = ref(null)
+let chartInstance = null
 
 const dietForm = ref({
   height: 170,
@@ -201,49 +204,56 @@ const dietTips = ref([
   '多吃蔬菜水果，保证膳食纤维摄入'
 ])
 
+const initNutritionChart = () => {
+  if (nutritionChart.value && dietPlan.value) {
+    if (chartInstance) {
+      chartInstance.dispose()
+    }
+    chartInstance = echarts.init(nutritionChart.value)
+    const option = {
+      tooltip: { trigger: 'item' },
+      legend: { bottom: '5%', selectedMode: false },
+      series: [{
+        type: 'pie',
+        radius: ['40%', '70%'],
+        avoidLabelOverlap: false,
+        itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+        label: { show: false, position: 'center' },
+        emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
+        data: [
+          { value: dietPlan.value.protein || 0, name: '蛋白质', itemStyle: { color: '#1a6b5a' } },
+          { value: dietPlan.value.carbs || 0, name: '碳水化合物', itemStyle: { color: '#c4956a' } },
+          { value: dietPlan.value.fat || 0, name: '脂肪', itemStyle: { color: '#5a8fbf' } }
+        ]
+      }]
+    }
+    chartInstance.setOption(option)
+    window.addEventListener('resize', () => chartInstance && chartInstance.resize())
+  }
+}
+
 const generateDiet = async () => {
   loading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 1500))
-
-    dietPlan.value = {
-      breakfast: [
-        { name: '全麦面包', amount: '2片', calories: 150, category: '主食' },
-        { name: '水煮蛋', amount: '1个', calories: 80, category: '蛋白质' },
-        { name: '低脂牛奶', amount: '250ml', calories: 120, category: '乳制品' },
-        { name: '圣女果', amount: '100g', calories: 25, category: '水果' }
-      ],
-      breakfastCalories: 375,
-      lunch: [
-        { name: '糙米饭', amount: '150g', calories: 180, category: '主食' },
-        { name: '清蒸鱼', amount: '150g', calories: 180, category: '蛋白质' },
-        { name: '西兰花炒虾仁', amount: '200g', calories: 120, category: '蔬菜' },
-        { name: '紫菜蛋花汤', amount: '1碗', calories: 50, category: '汤品' }
-      ],
-      lunchCalories: 530,
-      dinner: [
-        { name: '小米粥', amount: '1碗', calories: 100, category: '主食' },
-        { name: '鸡胸肉沙拉', amount: '200g', calories: 200, category: '蛋白质' },
-        { name: '凉拌黄瓜', amount: '150g', calories: 30, category: '蔬菜' }
-      ],
-      dinnerCalories: 330,
-      snacks: [
-        { name: '苹果', time: '上午10:00', calories: 80 },
-        { name: '坚果(10颗)', time: '下午15:00', calories: 100 }
-      ],
-      totalCalories: 1385,
-      protein: 75,
-      carbs: 180,
-      fat: 45
-    }
-
+    const res = await getDietPrescription(dietForm.value)
+    dietPlan.value = res.data
     ElMessage.success('饮食方案生成成功')
+    nextTick(() => {
+      initNutritionChart()
+    })
   } catch (error) {
     ElMessage.error('生成失败: ' + error.message)
   } finally {
     loading.value = false
   }
 }
+
+onUnmounted(() => {
+  if (chartInstance) {
+    chartInstance.dispose()
+    chartInstance = null
+  }
+})
 </script>
 
 <style scoped>

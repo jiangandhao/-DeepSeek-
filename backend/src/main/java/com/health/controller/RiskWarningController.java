@@ -65,8 +65,9 @@ public class RiskWarningController {
     public Result<List<Map<String, Object>>> getWarnings(
             @RequestParam Long userId,
             @RequestParam(required = false) String level,
-            @RequestParam(required = false) Boolean read) {
-        return Result.success(riskWarningService.getWarnings(userId, level, read));
+            @RequestParam(required = false) Boolean read,
+            @RequestParam(required = false) Boolean includeDismissed) {
+        return Result.success(riskWarningService.getWarnings(userId, level, read, includeDismissed));
     }
 
     /**

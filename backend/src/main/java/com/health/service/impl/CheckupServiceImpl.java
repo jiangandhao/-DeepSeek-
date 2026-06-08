@@ -1,13 +1,15 @@
 package com.health.service.impl;
 
+import com.health.entity.CheckupAppointment;
 import com.health.entity.CheckupReport;
+import com.health.mapper.CheckupAppointmentMapper;
 import com.health.mapper.CheckupReportMapper;
 import com.health.service.CheckupService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.*;
 
 @Service
@@ -15,6 +17,9 @@ public class CheckupServiceImpl implements CheckupService {
 
     @Autowired
     private CheckupReportMapper checkupReportMapper;
+
+    @Autowired
+    private CheckupAppointmentMapper checkupAppointmentMapper;
 
     @Override
     public List<Map<String, Object>> getPackages() {
@@ -57,43 +62,88 @@ public class CheckupServiceImpl implements CheckupService {
     @Override
     public List<Map<String, Object>> getTimeSlots(Long centerId, String date) {
         List<Map<String, Object>> slots = new ArrayList<>();
-        slots.add(createTimeSlot("08:00-08:30", true, 5));
-        slots.add(createTimeSlot("08:30-09:00", true, 3));
-        slots.add(createTimeSlot("09:00-09:30", false, 0));
-        slots.add(createTimeSlot("09:30-10:00", true, 8));
+        Random random = new Random();
+
+        // 生成 08:00 到 17:00 的时段（每30分钟一个）
+        for (int hour = 8; hour < 17; hour++) {
+            for (int minute = 0; minute < 60; minute += 30) {
+                String start = String.format("%02d:%02d", hour, minute);
+                String end;
+                if (minute == 0) {
+                    end = String.format("%02d:30", hour);
+                } else {
+                    end = String.format("%02d:00", hour + 1);
+                }
+                String timeRange = start + "-" + end;
+
+                // 随机生成剩余数量（0-10）
+                int count = random.nextInt(11);
+                boolean available = count > 0;
+
+                slots.add(createTimeSlot(timeRange, available, count));
+            }
+        }
         return slots;
     }
 
     @Override
     public Map<String, Object> createAppointment(Map<String, Object> appointment) {
+        CheckupAppointment entity = new CheckupAppointment();
+        entity.setUserId(Long.valueOf(appointment.get("userId").toString()));
+        entity.setPackageName(appointment.get("packageName") != null ? appointment.get("packageName").toString() : "");
+        entity.setCenterName(appointment.get("centerName") != null ? appointment.get("centerName").toString() : "");
+        entity.setAppointmentDate(LocalDate.parse(appointment.get("appointmentDate").toString()));
+        entity.setAppointmentTime(appointment.get("appointmentTime") != null ? appointment.get("appointmentTime").toString() : "");
+        entity.setStatus(0);
+        checkupAppointmentMapper.insert(entity);
+
         Map<String, Object> result = new HashMap<>();
         result.put("success", true);
-        result.put("appointmentId", System.currentTimeMillis());
+        result.put("appointmentId", entity.getId());
         result.put("message", "预约成功");
         return result;
     }
 
     @Override
     public List<Map<String, Object>> getAppointments(Long userId, String status) {
+        List<CheckupAppointment> list = checkupAppointmentMapper.selectByUserId(userId);
         List<Map<String, Object>> appointments = new ArrayList<>();
-        appointments.add(createAppointment(1L, "标准体检套餐", "美年大健康", "2025-01-20", "待体检"));
-        appointments.add(createAppointment(2L, "基础体检套餐", "爱康国宾", "2024-06-15", "已完成"));
+        for (CheckupAppointment a : list) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", a.getId());
+            map.put("packageName", a.getPackageName());
+            map.put("centerName", a.getCenterName());
+            map.put("appointmentDate", a.getAppointmentDate() != null ? a.getAppointmentDate().toString() : "");
+            map.put("appointmentTime", a.getAppointmentTime());
+            map.put("status", a.getStatus());
+            appointments.add(map);
+        }
         return appointments;
     }
 
     @Override
     public Map<String, Object> getAppointmentDetail(Long id) {
+        CheckupAppointment a = checkupAppointmentMapper.selectById(id);
         Map<String, Object> detail = new HashMap<>();
-        detail.put("id", id);
-        detail.put("package", "标准体检套餐");
-        detail.put("center", "美年大健康");
-        detail.put("date", "2025-01-20");
-        detail.put("time", "09:00-09:30");
+        if (a != null) {
+            detail.put("id", a.getId());
+            detail.put("packageName", a.getPackageName());
+            detail.put("centerName", a.getCenterName());
+            detail.put("appointmentDate", a.getAppointmentDate() != null ? a.getAppointmentDate().toString() : "");
+            detail.put("appointmentTime", a.getAppointmentTime());
+            detail.put("status", a.getStatus());
+            detail.put("checkupItems", a.getCheckupItems());
+        }
         return detail;
     }
 
     @Override
     public Map<String, Object> cancelAppointment(Long id) {
+        CheckupAppointment a = checkupAppointmentMapper.selectById(id);
+        if (a != null) {
+            a.setStatus(3);
+            checkupAppointmentMapper.updateById(a);
+        }
         Map<String, Object> result = new HashMap<>();
         result.put("success", true);
         result.put("message", "预约已取消");
@@ -182,16 +232,6 @@ public class CheckupServiceImpl implements CheckupService {
         slot.put("available", available);
         slot.put("count", count);
         return slot;
-    }
-
-    private Map<String, Object> createAppointment(Long id, String packageName, String center, String date, String status) {
-        Map<String, Object> appointment = new HashMap<>();
-        appointment.put("id", id);
-        appointment.put("package", packageName);
-        appointment.put("center", center);
-        appointment.put("date", date);
-        appointment.put("status", status);
-        return appointment;
     }
 
     private Map<String, String> createAnalysisSection(String title, String content) {

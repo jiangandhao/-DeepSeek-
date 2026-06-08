@@ -33,7 +33,7 @@ public interface RiskWarningService {
     /**
      * 获取预警列表
      */
-    List<Map<String, Object>> getWarnings(Long userId, String level, Boolean read);
+    List<Map<String, Object>> getWarnings(Long userId, String level, Boolean read, Boolean includeDismissed);
 
     /**
      * 标记预警已读

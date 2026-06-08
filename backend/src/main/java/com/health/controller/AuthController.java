@@ -3,6 +3,7 @@ package com.health.controller;
 import com.health.common.Result;
 import com.health.entity.User;
 import com.health.service.AuthService;
+import com.health.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,6 +16,9 @@ public class AuthController {
 
     @Autowired
     private AuthService authService;
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@RequestBody Map<String, String> loginData) {
@@ -33,8 +37,7 @@ public class AuthController {
     @GetMapping("/me")
     public Result<User> me(@RequestHeader("Authorization") String authorization) {
         String token = authorization.replace("Bearer ", "");
-        // JwtFilter would have validated this already
-        Long userId = authService.getCurrentUser(1L).getId(); // simplified
+        Long userId = jwtUtil.getUserIdFromToken(token);
         User user = authService.getCurrentUser(userId);
         return Result.success(user);
     }

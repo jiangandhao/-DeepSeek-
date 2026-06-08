@@ -6,7 +6,7 @@
         <div class="welcome-text">
           <p class="welcome-greeting">{{ greeting }}，{{ username }}</p>
           <h1 class="welcome-title">健康概览</h1>
-          <p class="welcome-desc">您的整体健康状况良好，今日有 <strong>2</strong> 项待办事项</p>
+          <p class="welcome-desc">您的整体健康状况良好，今日有 <strong>{{ warningCount }}</strong> 项待办事项</p>
         </div>
         <div class="welcome-art">
           <div class="art-circle art-circle-1"></div>
@@ -19,7 +19,13 @@
 
     <!-- 统计卡片 -->
     <section class="stats-section">
-      <div class="stat-card" v-for="(stat, index) in stats" :key="index" :style="{ animationDelay: `${index * 0.1}s` }">
+      <router-link
+        v-for="(stat, index) in stats"
+        :key="index"
+        :to="stat.path"
+        class="stat-card"
+        :style="{ animationDelay: `${index * 0.1}s` }"
+      >
         <div class="stat-icon-wrap" :style="{ background: stat.iconBg }">
           <div class="stat-icon" v-html="stat.icon"></div>
         </div>
@@ -30,14 +36,22 @@
             <svg v-if="stat.trendType === 'up'" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M2 8l4-4 4 4" />
             </svg>
-            <svg v-else viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+            <svg v-else-if="stat.trendType === 'down'" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M2 4l4 4 4-4" />
+            </svg>
+            <svg v-else viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="6" cy="6" r="4" />
             </svg>
             {{ stat.trend }}
           </span>
         </div>
         <div class="stat-sparkline" v-html="stat.sparkline"></div>
-      </div>
+        <div class="stat-arrow">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </div>
+      </router-link>
     </section>
 
     <!-- 主要内容区域 -->
@@ -171,13 +185,251 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import * as echarts from 'echarts'
+import { useRouter } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+import { getWarningStats } from '@/api/riskWarning'
+import { getBloodSugarTrend } from '@/api/bloodSugar'
+import { getBloodPressureTrend } from '@/api/bloodPressure'
+import { getWeightTrend } from '@/api/healthManager'
 
-const username = ref('用户')
+const router = useRouter()
+const userStore = useUserStore()
+const username = computed(() => userStore.username || '用户')
 const activeTab = ref('blood-sugar')
 const chartRef = ref(null)
+const chartInstance = ref(null)
 const score = ref(86)
+const warningCount = ref(0)
+
+// 加载预警统计
+const loadWarningStats = async () => {
+  if (!userStore.userId) return
+  try {
+    const res = await getWarningStats(userStore.userId)
+    if (res && res.data) {
+      // 使用 unread 字段表示未读预警数量
+      warningCount.value = res.data.unread || 0
+    }
+  } catch (error) {
+    console.error('加载预警统计失败:', error)
+  }
+}
+
+// 图表数据缓存
+const chartData = ref({
+  dates: [],
+  series: []
+})
+
+// 生成最近 N 天的日期列表 YYYY-MM-DD
+const getLastNDays = (n) => {
+  const days = []
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    days.push(d.toISOString().split('T')[0])
+  }
+  return days
+}
+
+// 解析 measureTime 兼容 ISO T 格式
+const parseDate = (timeStr) => {
+  if (!timeStr) return null
+  return timeStr.replace('T', ' ').split(' ')[0]
+}
+
+// 加载血糖趋势数据
+const loadBloodSugarTrend = async () => {
+  if (!userStore.userId) return
+  try {
+    const res = await getBloodSugarTrend(userStore.userId, '7d')
+    const records = (res && res.data && res.data.records) ? res.data.records : []
+    if (records.length > 0) {
+      // 用实际数据的日期，最多取最近7天
+      const allDates = [...new Set(records.map(r => parseDate(r.measureTime)).filter(Boolean))].sort().slice(-7)
+      const fasting = allDates.map(date => {
+        const dayRecs = records.filter(r => parseDate(r.measureTime) === date && r.type === 'fasting' && r.value != null)
+        return dayRecs.length > 0 ? Number((dayRecs.reduce((s, r) => s + Number(r.value), 0) / dayRecs.length).toFixed(1)) : null
+      })
+      const postprandial = allDates.map(date => {
+        const dayRecs = records.filter(r => parseDate(r.measureTime) === date && r.type === 'after' && r.value != null)
+        return dayRecs.length > 0 ? Number((dayRecs.reduce((s, r) => s + Number(r.value), 0) / dayRecs.length).toFixed(1)) : null
+      })
+      return {
+        dates: allDates.map(d => d.split('-')[1] + '/' + d.split('-')[2]),
+        series: [
+          { name: '空腹血糖', data: fasting, color: '#1a6b5a' },
+          { name: '餐后血糖', data: postprandial, color: '#c4956a' }
+        ],
+        yAxisName: 'mmol/L'
+      }
+    }
+  } catch (error) {
+    console.error('加载血糖趋势失败:', error)
+  }
+  // 返回默认数据
+  const last7 = getLastNDays(7)
+  return {
+    dates: last7.map(d => d.split('-')[1] + '/' + d.split('-')[2]),
+    series: [
+      { name: '空腹血糖', data: [5.8, 6.1, 5.9, 6.2, 5.7, 6.0, 5.9], color: '#1a6b5a' },
+      { name: '餐后血糖', data: [7.2, 7.8, 7.5, 8.1, 7.3, 7.6, 7.4], color: '#c4956a' }
+    ],
+    yAxisName: 'mmol/L'
+  }
+}
+
+// 加载血压趋势数据
+const loadBloodPressureTrend = async () => {
+  if (!userStore.userId) return
+  try {
+    const res = await getBloodPressureTrend(userStore.userId, '7d')
+    if (res && res.data) {
+      const dates = (res.data.dates || getLastNDays(7)).map(d => d.replace('-', '/'))
+      return {
+        dates,
+        series: [
+          { name: '收缩压', data: res.data.systolic || [], color: '#F56C6C' },
+          { name: '舒张压', data: res.data.diastolic || [], color: '#409EFF' }
+        ],
+        yAxisName: 'mmHg'
+      }
+    }
+  } catch (error) {
+    console.error('加载血压趋势失败:', error)
+  }
+  // 返回默认数据
+  const last7 = getLastNDays(7)
+  return {
+    dates: last7.map(d => d.split('-')[1] + '/' + d.split('-')[2]),
+    series: [
+      { name: '收缩压', data: [118, 122, 115, 120, 118, 125, 116], color: '#F56C6C' },
+      { name: '舒张压', data: [75, 78, 72, 76, 74, 80, 73], color: '#409EFF' }
+    ],
+    yAxisName: 'mmHg'
+  }
+}
+
+// 加载体重趋势数据
+const loadWeightTrend = async () => {
+  if (!userStore.userId) return
+  try {
+    const res = await getWeightTrend(userStore.userId, '7d')
+    if (res && res.data) {
+      const dates = (res.data.dates || getLastNDays(7)).map(d => d.replace('-', '/'))
+      return {
+        dates,
+        series: [
+          { name: '体重', data: res.data.weights || [], color: '#E6A23C' }
+        ],
+        yAxisName: 'kg'
+      }
+    }
+  } catch (error) {
+    console.error('加载体重趋势失败:', error)
+  }
+  // 返回默认数据
+  return {
+    dates: getLastNDays(7).map(d => d.split('-')[1] + '/' + d.split('-')[2]),
+    series: [
+      { name: '体重', data: [70.2, 70.5, 70.1, 70.3, 70.0, 70.4, 70.2], color: '#E6A23C' }
+    ],
+    yAxisName: 'kg'
+  }
+}
+
+// 更新图表数据 — 销毁重建，彻底避免 coordSys 丢失
+const updateChart = (config) => {
+  if (!chartInstance.value || !config || !config.series || !config.dates) return
+
+  const dates = config.dates.filter(d => d != null)
+  if (dates.length === 0) return
+
+  // 确保每个 series 的 data 长度与 dates 一致，缺失补 null
+  const padData = (arr, len) => {
+    if (!Array.isArray(arr)) return new Array(len).fill(null)
+    const result = arr.slice(0, len)
+    while (result.length < len) result.push(null)
+    return result.map(v => (v != null ? v : null))
+  }
+
+  const validSeries = config.series.filter(s => s && s.name)
+  if (validSeries.length === 0) return
+
+  // 销毁旧实例后重建，彻底避免 notMerge 导致的 coordSys 丢失问题
+  try {
+    const el = chartInstance.value.getDom()
+    chartInstance.value.dispose()
+    chartInstance.value = echarts.init(el)
+    window.removeEventListener('resize', handleResize)
+    window.addEventListener('resize', handleResize)
+
+    const option = {
+      tooltip: { trigger: 'axis' },
+      legend: { data: validSeries.map(s => s.name), right: 0, top: 0, selectedMode: false },
+      grid: { left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true },
+      xAxis: { type: 'category', data: dates, boundaryGap: false },
+      yAxis: { type: 'value', name: config.yAxisName || '' },
+      series: validSeries.map(s => ({
+        name: s.name,
+        type: 'line',
+        data: padData(s.data, dates.length),
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 8,
+        lineStyle: { color: s.color, width: 3 },
+        itemStyle: { color: s.color }
+      }))
+    }
+
+    chartInstance.value.setOption(option)
+  } catch (e) {
+    console.error('ECharts updateChart error:', e)
+  }
+}
+
+// 根据标签加载数据
+const loadTrendDataByTab = async (tab) => {
+  let config = null
+
+  switch (tab) {
+    case 'blood-sugar':
+      config = await loadBloodSugarTrend()
+      break
+    case 'blood-pressure':
+      config = await loadBloodPressureTrend()
+      break
+    case 'weight':
+      config = await loadWeightTrend()
+      break
+    default:
+      config = await loadBloodSugarTrend()
+  }
+
+  if (config) {
+    chartData.value = config
+    updateChart(config)
+  }
+}
+
+// 加载趋势数据
+const loadTrendData = async () => {
+  await loadTrendDataByTab(activeTab.value)
+}
+
+// 监听tab切换
+watch(activeTab, async (newTab) => {
+  await loadTrendDataByTab(newTab)
+})
+
+// 监听路由变化，刷新预警数量
+watch(() => router.currentRoute.value.path, () => {
+  if (userStore.userId) {
+    loadWarningStats()
+  }
+})
 
 const greeting = computed(() => {
   const hour = new Date().getHours()
@@ -190,12 +442,13 @@ const greeting = computed(() => {
   return '夜深了'
 })
 
-const stats = [
+const stats = computed(() => [
   {
     label: '今日血糖',
     value: '5.6',
     trend: '正常',
     trendType: 'normal',
+    path: '/blood-sugar',
     icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
     iconBg: 'rgba(26, 107, 90, 0.1)',
     sparkline: '<svg viewBox="0 0 80 24" width="80" height="24"><polyline points="0,18 10,14 20,16 30,10 40,12 50,8 60,10 70,6 80,4" fill="none" stroke="#1a6b5a" stroke-width="2"/></svg>'
@@ -205,6 +458,7 @@ const stats = [
     value: '4.5h',
     trend: '+12%',
     trendType: 'up',
+    path: '/blood-sugar/exercise',
     icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
     iconBg: 'rgba(196, 149, 106, 0.1)',
     sparkline: '<svg viewBox="0 0 80 24" width="80" height="24"><polyline points="0,20 10,16 20,18 30,12 40,14 50,10 60,8 70,6 80,4" fill="none" stroke="#c4956a" stroke-width="2"/></svg>'
@@ -214,20 +468,22 @@ const stats = [
     value: '85分',
     trend: '+5%',
     trendType: 'up',
+    path: '/health-manager',
     icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
     iconBg: 'rgba(90, 143, 191, 0.1)',
     sparkline: '<svg viewBox="0 0 80 24" width="80" height="24"><polyline points="0,14 10,16 20,12 30,14 40,10 50,12 60,8 70,10 80,6" fill="none" stroke="#5a8fbf" stroke-width="2"/></svg>'
   },
   {
     label: '风险预警',
-    value: '2',
-    trend: '待处理',
-    trendType: 'warning',
+    value: String(warningCount.value),
+    trend: warningCount.value > 0 ? '待处理' : '已处理',
+    trendType: warningCount.value > 0 ? 'warning' : 'normal',
+    path: '/risk-warning/early',
     icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
     iconBg: 'rgba(199, 84, 80, 0.1)',
     sparkline: '<svg viewBox="0 0 80 24" width="80" height="24"><polyline points="0,12 10,14 20,10 30,16 40,12 50,14 60,10 70,12 80,8" fill="none" stroke="#c75450" stroke-width="2"/></svg>'
   }
-]
+])
 
 const chartTabs = [
   { key: 'blood-sugar', label: '血糖' },
@@ -280,86 +536,75 @@ const scoreDetails = [
   { label: '睡眠质量', value: '88分', percent: 88, color: '#4a9d7e' }
 ]
 
-onMounted(() => {
+onMounted(async () => {
+  // 等待用户信息加载完成
+  if (!userStore.userId && userStore.token) {
+    await userStore.fetchUserInfo()
+  }
+  loadWarningStats()
+
+  // 延迟初始化图表，确保 DOM 已渲染，再加载数据
   nextTick(() => {
-    if (chartRef.value) {
-      initChart()
-    }
+    setTimeout(() => {
+      if (chartRef.value) {
+        initChart()
+        // 图表初始化后再加载趋势数据，避免竞态
+        loadTrendData()
+      }
+    }, 100)
   })
 })
 
+onUnmounted(() => {
+  if (chartInstance.value) {
+    chartInstance.value.dispose()
+    chartInstance.value = null
+  }
+  window.removeEventListener('resize', handleResize)
+})
+
+const handleResize = () => {
+  if (chartInstance.value) {
+    chartInstance.value.resize()
+  }
+}
+
 const initChart = () => {
-  const chart = echarts.init(chartRef.value)
+  if (!chartRef.value) return
+  if (chartInstance.value) {
+    chartInstance.value.dispose()
+  }
+  chartInstance.value = echarts.init(chartRef.value)
+  const chart = chartInstance.value
   const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
   const option = {
     tooltip: {
-      trigger: 'axis',
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: 'rgba(0, 0, 0, 0.06)',
-      borderWidth: 1,
-      textStyle: {
-        color: '#2c2c2c',
-        fontFamily: 'DM Sans'
-      },
-      axisPointer: {
-        type: 'cross',
-        crossStyle: {
-          color: '#9a9a9a'
-        }
-      }
+      trigger: 'axis'
     },
     legend: {
       data: ['空腹血糖', '餐后血糖'],
       right: 0,
       top: 0,
-      textStyle: {
-        fontFamily: 'DM Sans',
-        fontSize: 12,
-        color: '#6b6b6b'
-      },
-      itemWidth: 16,
-      itemHeight: 2
+      selectedMode: false
     },
     grid: {
-      left: 0,
-      right: 0,
-      bottom: 0,
-      top: 40,
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '15%',
       containLabel: true
     },
     xAxis: {
       type: 'category',
       data: days,
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: {
-        color: '#9a9a9a',
-        fontFamily: 'DM Sans',
-        fontSize: 11
-      }
+      boundaryGap: false
     },
     yAxis: {
       type: 'value',
       name: 'mmol/L',
-      nameTextStyle: {
-        color: '#9a9a9a',
-        fontFamily: 'DM Sans',
-        fontSize: 11
-      },
-      axisLine: { show: false },
-      axisTick: { show: false },
-      splitLine: {
-        lineStyle: {
-          color: 'rgba(0, 0, 0, 0.04)',
-          type: 'dashed'
-        }
-      },
-      axisLabel: {
-        color: '#9a9a9a',
-        fontFamily: 'DM Sans',
-        fontSize: 11
-      }
+      min: 4,
+      max: 10
     },
     series: [
       {
@@ -368,25 +613,13 @@ const initChart = () => {
         data: [5.8, 6.1, 5.9, 6.2, 5.7, 6.0, 5.9],
         smooth: true,
         symbol: 'circle',
-        symbolSize: 6,
+        symbolSize: 8,
         lineStyle: {
           color: '#1a6b5a',
-          width: 2.5
+          width: 3
         },
         itemStyle: {
-          color: '#1a6b5a',
-          borderWidth: 2,
-          borderColor: '#fff'
-        },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(26, 107, 90, 0.15)' },
-              { offset: 1, color: 'rgba(26, 107, 90, 0)' }
-            ]
-          }
+          color: '#1a6b5a'
         }
       },
       {
@@ -395,33 +628,24 @@ const initChart = () => {
         data: [7.2, 7.8, 7.5, 8.1, 7.3, 7.6, 7.4],
         smooth: true,
         symbol: 'circle',
-        symbolSize: 6,
+        symbolSize: 8,
         lineStyle: {
           color: '#c4956a',
-          width: 2.5
+          width: 3
         },
         itemStyle: {
-          color: '#c4956a',
-          borderWidth: 2,
-          borderColor: '#fff'
-        },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(196, 149, 106, 0.15)' },
-              { offset: 1, color: 'rgba(196, 149, 106, 0)' }
-            ]
-          }
+          color: '#c4956a'
         }
       }
     ]
   }
 
-  chart.setOption(option)
-
-  window.addEventListener('resize', () => chart.resize())
+  try {
+    chart.setOption(option)
+  } catch (e) {
+    console.error('ECharts initChart error:', e)
+  }
+  window.addEventListener('resize', handleResize)
 }
 </script>
 
@@ -578,6 +802,9 @@ const initChart = () => {
   animation: fadeInUp 0.6s ease both;
   position: relative;
   overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
 }
 
 @keyframes fadeInUp {
@@ -594,6 +821,21 @@ const initChart = () => {
 .stat-card:hover {
   transform: translateY(-4px);
   box-shadow: var(--shadow-md);
+}
+
+.stat-arrow {
+  position: absolute;
+  right: var(--space-md);
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: all 0.3s ease;
+  color: var(--color-text-muted);
+}
+
+.stat-card:hover .stat-arrow {
+  opacity: 1;
+  right: var(--space-lg);
 }
 
 .stat-icon-wrap {

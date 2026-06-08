@@ -17,7 +17,7 @@
           </el-steps>
 
           <!-- 步骤1: 选择套餐 -->
-          <div v-if="currentStep === 0" class="step-content">
+          <div v-show="currentStep === 0" class="step-content">
             <h3>请选择体检套餐</h3>
             <el-row :gutter="20">
               <el-col :span="8" v-for="pkg in packages" :key="pkg.id">
@@ -38,15 +38,31 @@
           </div>
 
           <!-- 步骤2: 选择机构 -->
-          <div v-if="currentStep === 1" class="step-content">
-            <h3>请选择体检机构</h3>
+          <div v-show="currentStep === 1" class="step-content">
+            <div class="location-header">
+              <h3>请选择体检机构</h3>
+              <div class="location-status">
+                <span v-if="locationLoading" class="loading-text">
+                  <el-icon class="is-loading"><Location /></el-icon> 正在定位...
+                </span>
+                <span v-else-if="userLocation" class="location-success">
+                  <el-icon><Location /></el-icon> 已定位（{{ userLocation.lat.toFixed(4) }}, {{ userLocation.lng.toFixed(4) }}）
+                </span>
+                <span v-else-if="locationError" class="location-error">
+                  {{ locationError }}
+                </span>
+                <el-button size="small" @click="refreshLocation" :loading="locationLoading">
+                  刷新定位
+                </el-button>
+              </div>
+            </div>
             <el-row :gutter="20">
               <el-col :span="12" v-for="center in centers" :key="center.id">
                 <el-card shadow="hover" :class="{ 'selected': selectedCenter?.id === center.id }" @click="selectCenter(center)">
                   <div class="center-card">
                     <h4>{{ center.name }}</h4>
                     <p><el-icon><Location /></el-icon> {{ center.address }}</p>
-                    <p><el-icon><Phone /></el-icon> {{ center.phone }}</p>
+                    <p v-if="center.phone"><el-icon><Phone /></el-icon> {{ center.phone }}</p>
                     <div class="center-info">
                       <el-rate v-model="center.rating" disabled show-score />
                       <span class="distance">{{ center.distance }}</span>
@@ -61,13 +77,21 @@
           </div>
 
           <!-- 步骤3: 选择时间 -->
-          <div v-if="currentStep === 2" class="step-content">
+          <div v-show="currentStep === 2" class="step-content">
             <h3>请选择预约时间</h3>
             <el-row :gutter="20">
               <el-col :span="12">
                 <el-card>
                   <template #header><span>选择日期</span></template>
-                  <el-calendar v-model="selectedDate" :disabled-date="disabledDate" />
+                  <el-date-picker
+                    v-model="selectedDate"
+                    type="date"
+                    placeholder="选择日期"
+                    :disabled-date="disabledDate"
+                    value-format="YYYY-MM-DD"
+                    style="width: 100%"
+                    @change="handleDateChange"
+                  />
                 </el-card>
               </el-col>
               <el-col :span="12">
@@ -81,6 +105,9 @@
                       <el-tag v-if="!slot.available" type="info" size="small">已满</el-tag>
                       <span v-else class="slot-count">剩余{{ slot.count }}个</span>
                     </div>
+                    <div v-if="timeSlots.length === 0" class="no-slots">
+                      暂无可用时段
+                    </div>
                   </div>
                 </el-card>
               </el-col>
@@ -88,12 +115,12 @@
           </div>
 
           <!-- 步骤4: 确认预约 -->
-          <div v-if="currentStep === 3" class="step-content">
+          <div v-show="currentStep === 3" class="step-content">
             <h3>确认预约信息</h3>
             <el-descriptions :column="1" border>
               <el-descriptions-item label="体检套餐">{{ selectedPackage?.name }}</el-descriptions-item>
               <el-descriptions-item label="体检机构">{{ selectedCenter?.name }}</el-descriptions-item>
-              <el-descriptions-item label="预约日期">{{ selectedDate?.toLocaleDateString() }}</el-descriptions-item>
+              <el-descriptions-item label="预约日期">{{ selectedDate }}</el-descriptions-item>
               <el-descriptions-item label="预约时段">{{ selectedTime }}</el-descriptions-item>
               <el-descriptions-item label="套餐价格">
                 <span class="price">¥{{ selectedPackage?.price }}</span>
@@ -110,7 +137,7 @@
           </div>
 
           <div class="step-actions">
-            <el-button v-if="currentStep > 0" @click="currentStep--">上一步</el-button>
+            <el-button v-if="currentStep > 0" @click="prevStep">上一步</el-button>
             <el-button v-if="currentStep < 3" type="primary" @click="nextStep" :disabled="!canNext">
               下一步
             </el-button>
@@ -126,13 +153,19 @@
           <template #header>
             <span>我的预约</span>
           </template>
-          <div v-for="item in myAppointments" :key="item.id" class="appointment-item">
+          <div v-for="item in myAppointments" :key="item.id" class="appointment-item" @click="showDetail(item)" style="cursor: pointer;">
             <div class="appt-info">
-              <h4>{{ item.package }}</h4>
-              <p>{{ item.center }}</p>
-              <p>{{ item.date }} {{ item.time }}</p>
+              <h4>{{ item.packageName || item.package }}</h4>
+              <p>{{ item.centerName || item.center }}</p>
+              <p>{{ item.appointmentDate || item.date }} {{ item.appointmentTime || item.time }}</p>
             </div>
-            <el-tag :type="getStatusType(item.status)">{{ item.status }}</el-tag>
+            <div class="appt-actions">
+              <el-tag :type="getStatusType(item.status)">{{ getStatusText(item.status) }}</el-tag>
+              <el-button v-if="item.status === 0 || item.status === 1" size="small" type="danger" @click.stop="cancelAppointment(item)">取消</el-button>
+            </div>
+          </div>
+          <div v-if="myAppointments.length === 0" style="text-align: center; color: #999; padding: 20px;">
+            暂无预约
           </div>
         </el-card>
 
@@ -143,7 +176,10 @@
           <div class="ai-recommend">
             <el-icon><MagicStick /></el-icon>
             <p>根据您的健康档案，AI推荐您进行：</p>
-            <ul>
+            <ul v-if="aiRecommendations.length > 0">
+              <li v-for="(item, index) in aiRecommendations" :key="index">{{ item }}</li>
+            </ul>
+            <ul v-else>
               <li>胸部CT检查（家族有肺部疾病史）</li>
               <li>糖化血红蛋白检测（血糖偏高）</li>
               <li>颈动脉超声（年龄>40岁）</li>
@@ -152,14 +188,36 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 预约详情弹窗 -->
+    <el-dialog v-model="detailDialogVisible" title="预约详情" width="500px">
+      <el-descriptions :column="1" border v-if="currentDetail">
+        <el-descriptions-item label="预约编号">{{ currentDetail.id }}</el-descriptions-item>
+        <el-descriptions-item label="体检套餐">{{ currentDetail.packageName }}</el-descriptions-item>
+        <el-descriptions-item label="体检机构">{{ currentDetail.centerName }}</el-descriptions-item>
+        <el-descriptions-item label="预约日期">{{ currentDetail.appointmentDate }}</el-descriptions-item>
+        <el-descriptions-item label="预约时段">{{ currentDetail.appointmentTime }}</el-descriptions-item>
+        <el-descriptions-item label="预约状态">
+          <el-tag :type="getStatusType(currentDetail.status)">{{ getStatusText(currentDetail.status) }}</el-tag>
+        </el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button v-if="currentDetail && (currentDetail.status === 0 || currentDetail.status === 1)" type="danger" @click="cancelFromDetail">取消预约</el-button>
+        <el-button @click="detailDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Location, Phone, MagicStick } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getCheckupPackages, getCheckupCenters, getTimeSlots, createAppointment, getAppointments, cancelAppointment as cancelAppointmentApi, getAiRecommendation } from '@/api/checkup'
+import { getNearbyHospitals } from '@/api/location'
+import { useUserStore } from '@/stores/user'
 
+const userStore = useUserStore()
 const currentStep = ref(0)
 const loading = ref(false)
 const selectedPackage = ref(null)
@@ -167,40 +225,44 @@ const selectedCenter = ref(null)
 const selectedDate = ref(new Date())
 const selectedTime = ref('')
 
-const packages = ref([
-  {
-    id: 1, name: '基础体检套餐', price: 298, suitable: '',
-    items: ['血常规', '尿常规', '肝功能', '肾功能', '心电图', '胸部X光']
-  },
-  {
-    id: 2, name: '标准体检套餐', price: 598, suitable: '推荐',
-    items: ['血常规', '尿常规', '肝功能', '肾功能', '血脂', '血糖', '心电图', '胸部X光', '腹部B超', '甲状腺B超']
-  },
-  {
-    id: 3, name: '深度体检套餐', price: 1280, suitable: '',
-    items: ['血常规', '尿常规', '肝功能', '肾功能', '血脂', '血糖', '肿瘤标志物', '心电图', '胸部CT', '腹部B超', '甲状腺B超', '骨密度']
+const packages = ref([])
+const centers = ref([])
+const timeSlots = ref([])
+const myAppointments = ref([])
+const aiRecommendations = ref([])
+
+// 定位相关
+const userLocation = ref(null)
+const locationLoading = ref(false)
+const locationError = ref('')
+
+// 预约详情弹窗
+const detailDialogVisible = ref(false)
+const currentDetail = ref(null)
+
+const showDetail = (item) => {
+  currentDetail.value = item
+  detailDialogVisible.value = true
+}
+
+const cancelFromDetail = async () => {
+  if (!currentDetail.value) return
+  try {
+    await ElMessageBox.confirm('确定要取消这个预约吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await cancelAppointmentApi(currentDetail.value.id)
+    ElMessage.success('预约已取消')
+    detailDialogVisible.value = false
+    await loadMyAppointments()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('取消预约失败')
+    }
   }
-])
-
-const centers = ref([
-  { id: 1, name: '美年大健康(光谷店)', address: '武汉市洪山区光谷大道77号', phone: '027-87654321', rating: 4.5, distance: '2.3km', waitTime: 15 },
-  { id: 2, name: '爱康国宾(武昌店)', address: '武汉市武昌区中南路99号', phone: '027-87651234', rating: 4.3, distance: '5.1km', waitTime: 25 },
-  { id: 3, name: '瑞慈体检(汉口店)', address: '武汉市江汉区解放大道688号', phone: '027-85432109', rating: 4.7, distance: '8.5km', waitTime: 45 }
-])
-
-const timeSlots = ref([
-  { time: '08:00-08:30', available: true, count: 5 },
-  { time: '08:30-09:00', available: true, count: 3 },
-  { time: '09:00-09:30', available: false, count: 0 },
-  { time: '09:30-10:00', available: true, count: 8 },
-  { time: '10:00-10:30', available: true, count: 12 },
-  { time: '10:30-11:00', available: true, count: 10 }
-])
-
-const myAppointments = ref([
-  { id: 1, package: '标准体检套餐', center: '美年大健康(光谷店)', date: '2025-01-20', time: '09:00-09:30', status: '待体检' },
-  { id: 2, package: '基础体检套餐', center: '爱康国宾(武昌店)', date: '2024-06-15', time: '08:30-09:00', status: '已完成' }
-])
+}
 
 const canNext = computed(() => {
   if (currentStep.value === 0) return selectedPackage.value !== null
@@ -214,29 +276,214 @@ const disabledDate = (date) => {
 }
 
 const getStatusType = (status) => {
-  const map = { '待体检': 'warning', '已完成': 'success', '已取消': 'info' }
+  const map = { 0: 'warning', 1: 'success', 2: 'info', 3: 'danger' }
   return map[status] || ''
+}
+
+const getStatusText = (status) => {
+  const map = { 0: '待确认', 1: '已确认', 2: '已完成', 3: '已取消' }
+  return map[status] || '未知'
 }
 
 const selectPackage = (pkg) => { selectedPackage.value = pkg }
 const selectCenter = (center) => { selectedCenter.value = center }
 
 const nextStep = () => {
-  if (canNext.value) currentStep.value++
+  if (canNext.value) {
+    currentStep.value++
+    if (currentStep.value === 2) {
+      loadTimeSlots()
+    }
+  }
+}
+
+const prevStep = () => {
+  if (currentStep.value > 0) currentStep.value--
+}
+
+const loadPackages = async () => {
+  try {
+    const res = await getCheckupPackages()
+    packages.value = res.data || []
+  } catch (error) {
+    console.error('加载套餐失败:', error)
+  }
+}
+
+const loadCenters = async () => {
+  try {
+    const res = await getCheckupCenters()
+    centers.value = res.data || []
+  } catch (error) {
+    console.error('加载机构失败:', error)
+  }
+}
+
+// 获取用户位置
+const getUserLocation = () => {
+  if (!navigator.geolocation) {
+    locationError.value = '您的浏览器不支持定位功能'
+    return
+  }
+
+  locationLoading.value = true
+  locationError.value = ''
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const { latitude, longitude } = position.coords
+      userLocation.value = { lat: latitude, lng: longitude }
+      locationLoading.value = false
+
+      // 加载附近医院
+      await loadNearbyHospitals(latitude, longitude)
+    },
+    (error) => {
+      locationLoading.value = false
+      switch (error.code) {
+        case error.PERMISSION_DENIED:
+          locationError.value = '定位权限被拒绝，请在浏览器设置中允许定位'
+          break
+        case error.POSITION_UNAVAILABLE:
+          locationError.value = '位置信息不可用'
+          break
+        case error.TIMEOUT:
+          locationError.value = '定位请求超时'
+          break
+        default:
+          locationError.value = '获取位置失败'
+      }
+      // 定位失败时使用默认数据
+      loadCenters()
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 300000
+    }
+  )
+}
+
+// 加载附近医院
+const loadNearbyHospitals = async (lat, lng) => {
+  try {
+    const res = await getNearbyHospitals(lat, lng, 10)
+    centers.value = res.data || []
+  } catch (error) {
+    console.error('加载附近医院失败:', error)
+    // 失败时使用默认数据
+    loadCenters()
+  }
+}
+
+// 刷新定位
+const refreshLocation = () => {
+  getUserLocation()
+}
+
+const loadTimeSlots = async () => {
+  if (!selectedCenter.value || !selectedDate.value) return
+  try {
+    // selectedDate 可能是 Date 对象或字符串
+    let dateStr
+    if (typeof selectedDate.value === 'string') {
+      dateStr = selectedDate.value
+    } else {
+      dateStr = selectedDate.value.toISOString().split('T')[0]
+    }
+    const res = await getTimeSlots(selectedCenter.value.id, dateStr)
+    timeSlots.value = res.data || []
+  } catch (error) {
+    console.error('加载时间段失败:', error)
+  }
+}
+
+const handleDateChange = (date) => {
+  selectedTime.value = ''
+  loadTimeSlots()
+}
+
+const loadMyAppointments = async () => {
+  try {
+    const res = await getAppointments(userStore.userId)
+    myAppointments.value = res.data || []
+  } catch (error) {
+    console.error('加载预约列表失败:', error)
+  }
+}
+
+const loadAiRecommendations = async () => {
+  try {
+    const res = await getAiRecommendation(userStore.userId)
+    aiRecommendations.value = res.data?.recommendedPackages || []
+  } catch (error) {
+    console.error('加载AI推荐失败:', error)
+  }
+}
+
+const cancelAppointment = async (appointment) => {
+  try {
+    await ElMessageBox.confirm('确定要取消这个预约吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await cancelAppointmentApi(appointment.id)
+    ElMessage.success('预约已取消')
+    await loadMyAppointments()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('取消预约失败')
+    }
+  }
 }
 
 const confirmAppointment = async () => {
   loading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    // selectedDate 可能是字符串或 Date 对象
+    let dateStr
+    if (typeof selectedDate.value === 'string') {
+      dateStr = selectedDate.value
+    } else {
+      dateStr = selectedDate.value.toISOString().split('T')[0]
+    }
+    const appointmentData = {
+      userId: userStore.userId,
+      packageName: selectedPackage.value.name,
+      centerName: selectedCenter.value.name,
+      appointmentDate: dateStr,
+      appointmentTime: selectedTime.value
+    }
+    await createAppointment(appointmentData)
     ElMessage.success('预约成功！请注意查收短信通知')
     currentStep.value = 0
+    selectedPackage.value = null
+    selectedCenter.value = null
+    selectedTime.value = ''
+    await loadMyAppointments()
   } catch (error) {
     ElMessage.error('预约失败')
   } finally {
     loading.value = false
   }
 }
+
+onMounted(async () => {
+  // 等待用户信息加载完成
+  if (!userStore.userId && userStore.token) {
+    await userStore.fetchUserInfo()
+  }
+  loadPackages()
+  getUserLocation() // 获取定位并加载附近医院
+  loadMyAppointments()
+  loadAiRecommendations()
+})
+
+onUnmounted(() => {
+  // 清理状态
+  timeSlots.value = []
+})
 </script>
 
 <style scoped>
@@ -318,6 +565,11 @@ const confirmAppointment = async () => {
   color: #67C23A;
   font-size: 12px;
 }
+.no-slots {
+  text-align: center;
+  color: #999;
+  padding: 20px;
+}
 .appointment-item {
   display: flex;
   justify-content: space-between;
@@ -348,5 +600,29 @@ const confirmAppointment = async () => {
 .ai-recommend li {
   margin: 5px 0;
   font-size: 13px;
+}
+.location-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.location-header h3 {
+  margin: 0;
+}
+.location-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.loading-text {
+  color: #409EFF;
+}
+.location-success {
+  color: #67C23A;
+}
+.location-error {
+  color: #F56C6C;
 }
 </style>

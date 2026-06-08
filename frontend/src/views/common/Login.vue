@@ -233,8 +233,10 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { login, register } from '@/api/auth'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const userStore = useUserStore()
 const isLogin = ref(true)
 const isLoading = ref(false)
 const showPassword = ref(false)
@@ -267,7 +269,7 @@ const handleLogin = async () => {
   isLoading.value = true
   try {
     const res = await login({ username: loginForm.username, password: loginForm.password })
-    localStorage.setItem('token', res.data.token)
+    userStore.setToken(res.data.token)
     ElMessage.success('登录成功')
     router.push('/dashboard')
   } catch (error) {

@@ -18,7 +18,7 @@
               <el-descriptions :column="2" border>
                 <el-descriptions-item label="确诊时间">2023-06-15</el-descriptions-item>
                 <el-descriptions-item label="当前用药">二甲双胍 500mg/次</el-descriptions-item>
-                <el-descriptions-item label="血糖控制目标">空腹<7.0, 餐后<10.0</el-descriptions-item>
+                <el-descriptions-item label="血糖控制目标">空腹&lt;7.0, 餐后&lt;10.0</el-descriptions-item>
                 <el-descriptions-item label="最近复查">2024-12-20</el-descriptions-item>
               </el-descriptions>
 
@@ -45,7 +45,7 @@
               <el-descriptions :column="2" border>
                 <el-descriptions-item label="确诊时间">2022-03-10</el-descriptions-item>
                 <el-descriptions-item label="当前用药">氨氯地平 5mg/次</el-descriptions-item>
-                <el-descriptions-item label="血压控制目标"><140/90 mmHg</el-descriptions-item>
+                <el-descriptions-item label="血压控制目标">&lt;140/90 mmHg</el-descriptions-item>
                 <el-descriptions-item label="最近复查">2025-01-05</el-descriptions-item>
               </el-descriptions>
 
@@ -152,79 +152,77 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Plus, Calendar, InfoFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { getDiseaseManagement, addMonitoringRecord, getMedicationReminder, getFollowUpReminders, getAiAdvice } from '../../api/healthManager'
 
 const activeTab = ref('diabetes')
 const dialogVisible = ref(false)
 const recordForm = ref({ type: 'bloodSugar', value: 5.6, systolic: 120, diastolic: 80, note: '' })
+const userId = ref(1) // 从登录状态获取
 
-const diabetesRecords = ref([
-  { date: '2025-01-10', fasting: 6.2, postprandial: 8.5, medication: '二甲双胍 500mg', diet: '正常饮食', note: '' },
-  { date: '2025-01-09', fasting: 6.8, postprandial: 9.2, medication: '二甲双胍 500mg', diet: '晚餐偏多', note: '需控制晚餐量' },
-  { date: '2025-01-08', fasting: 5.9, postprandial: 7.8, medication: '二甲双胍 500mg', diet: '正常饮食', note: '' }
-])
+const diabetesRecords = ref([])
+const hypertensionRecords = ref([])
+const medications = ref([])
+const followUps = ref([])
+const aiAdvice = ref([])
 
-const hypertensionRecords = ref([
-  { date: '2025-01-10', systolic: 128, diastolic: 82, heartRate: 72, medication: '氨氯地平 5mg', note: '' },
-  { date: '2025-01-09', systolic: 135, diastolic: 88, heartRate: 75, medication: '氨氯地平 5mg', note: '情绪紧张' },
-  { date: '2025-01-08', systolic: 125, diastolic: 80, heartRate: 70, medication: '氨氯地平 5mg', note: '' }
-])
+const loadData = async () => {
+  try {
+    const [diseaseRes, medicationRes, followUpRes, adviceRes] = await Promise.all([
+      getDiseaseManagement(userId.value),
+      getMedicationReminder(userId.value),
+      getFollowUpReminders(userId.value),
+      getAiAdvice(userId.value)
+    ])
 
-const medications = ref([
-  { name: '二甲双胍', dosage: '500mg', frequency: '每日2次，餐后服用', purpose: '控制血糖', taken: true },
-  { name: '氨氯地平', dosage: '5mg', frequency: '每日1次，早晨服用', purpose: '控制血压', taken: true },
-  { name: '阿托伐他汀', dosage: '20mg', frequency: '每日1次，睡前服用', purpose: '调节血脂', taken: false }
-])
+    if (diseaseRes.data) {
+      diabetesRecords.value = diseaseRes.data.diabetesRecords || []
+      hypertensionRecords.value = diseaseRes.data.hypertensionRecords || []
+    }
 
-const followUps = ref([
-  { type: '内分泌科复查', date: '2025-02-15', daysLeft: '还有36天', urgent: false },
-  { type: '心血管科复查', date: '2025-01-25', daysLeft: '还有15天', urgent: true },
-  { type: '年度体检', date: '2025-06-01', daysLeft: '还有142天', urgent: false }
-])
-
-const aiAdvice = ref([
-  { text: '近期血糖控制良好，继续保持当前用药和饮食方案', color: '#67C23A' },
-  { text: '建议每周至少进行150分钟中等强度有氧运动', color: '#409EFF' },
-  { text: '血压偶有波动，注意情绪管理和规律作息', color: '#E6A23C' },
-  { text: '下次复查请携带近3个月的监测记录', color: '#909399' }
-])
+    medications.value = medicationRes.data || []
+    followUps.value = followUpRes.data || []
+    aiAdvice.value = (adviceRes.data || []).map(text => ({ text, color: '#409EFF' }))
+  } catch (error) {
+    console.error('加载疾病管理数据失败:', error)
+  }
+}
 
 const addRecord = () => {
   recordForm.value = { type: 'bloodSugar', value: 5.6, systolic: 120, diastolic: 80, note: '' }
   dialogVisible.value = true
 }
 
-const saveRecord = () => {
-  const today = new Date().toISOString().split('T')[0]
-  if (recordForm.value.type === 'bloodSugar') {
-    diabetesRecords.value.unshift({
-      date: today,
-      fasting: recordForm.value.value,
-      postprandial: '-',
-      medication: '二甲双胍 500mg',
-      diet: '',
-      note: recordForm.value.note
-    })
-  } else {
-    hypertensionRecords.value.unshift({
-      date: today,
-      systolic: recordForm.value.systolic,
-      diastolic: recordForm.value.diastolic,
-      heartRate: '-',
-      medication: '氨氯地平 5mg',
-      note: recordForm.value.note
-    })
+const saveRecord = async () => {
+  try {
+    const recordData = {
+      userId: userId.value,
+      type: recordForm.value.type,
+      value: recordForm.value.type === 'bloodSugar' ? recordForm.value.value : undefined,
+      systolic: recordForm.value.type === 'bloodPressure' ? recordForm.value.systolic : undefined,
+      diastolic: recordForm.value.type === 'bloodPressure' ? recordForm.value.diastolic : undefined,
+      note: recordForm.value.note,
+      measureTime: new Date().toISOString()
+    }
+    await addMonitoringRecord(recordData)
+    dialogVisible.value = false
+    ElMessage.success('记录保存成功')
+    await loadData()
+  } catch (error) {
+    ElMessage.error('保存失败')
   }
-  dialogVisible.value = false
-  ElMessage.success('记录保存成功')
 }
 
 const markTaken = (med) => {
   med.taken = true
   ElMessage.success(`${med.name} 已标记为已服用`)
 }
+
+onMounted(() => {
+  loadData()
+})
 </script>
 
 <style scoped>

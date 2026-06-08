@@ -146,11 +146,13 @@
 import { ref } from 'vue'
 import { MagicStick, UploadFilled, Document, Loading, CircleCheck } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { analyzeImage as analyzeImageApi, getAnalysisResult } from '../../api/checkup'
 
 const activeType = ref('lung')
 const analyzing = ref(false)
 const uploadedFile = ref(null)
 const analysisResult = ref(null)
+const taskId = ref(null)
 
 const handleFileChange = (file) => {
   uploadedFile.value = file.raw
@@ -158,51 +160,56 @@ const handleFileChange = (file) => {
 }
 
 const getSeverityType = (severity) => {
-  const map = { '高': 'danger', '中': 'warning', '低': 'info' }
+  const map = { 'high': 'danger', 'medium': 'warning', 'low': 'info' }
   return map[severity] || 'info'
 }
 
 const analyzeImage = async () => {
+  if (!uploadedFile.value) {
+    ElMessage.warning('请先上传影像文件')
+    return
+  }
+
   analyzing.value = true
   analysisResult.value = null
 
   try {
-    await new Promise(resolve => setTimeout(resolve, 3000))
+    const formData = new FormData()
+    formData.append('file', uploadedFile.value)
 
-    analysisResult.value = {
-      level: 'warning',
-      icon: 'Warning',
-      status: '发现异常，需进一步检查',
-      findings: [
-        {
-          name: '肺结节',
-          severity: '中',
-          x: 35,
-          y: 40,
-          description: '右肺上叶见一磨玻璃结节，大小约6mm',
-          suggession: '建议3个月后复查CT，观察结节变化'
-        },
-        {
-          name: '肺纹理增多',
-          severity: '低',
-          x: 60,
-          y: 55,
-          description: '双肺纹理增多、增粗',
-          suggestion: '可能与吸烟或慢性炎症有关，建议戒烟'
-        }
-      ],
-      diagnosis: '1. 右肺上叶磨玻璃结节（GGN），建议随访观察；2. 双肺纹理增多，考虑慢性支气管炎可能。',
-      disclaimer: '⚠️ 本分析结果仅供参考，不能替代专业医生的诊断。请将结果带给主治医生进行综合判断。'
+    const res = await analyzeImageApi(formData)
+    taskId.value = res.data?.taskId
+
+    // 轮询获取分析结果
+    if (taskId.value) {
+      await pollForResult(taskId.value)
     }
-
-    // 修正 findings 中的 suggestion 字段
-    analysisResult.value.findings[0].suggestion = '建议3个月后复查CT，观察结节变化'
 
     ElMessage.success('分析完成')
   } catch (error) {
     ElMessage.error('分析失败')
   } finally {
     analyzing.value = false
+  }
+}
+
+const pollForResult = async (id) => {
+  let attempts = 0
+  const maxAttempts = 30
+
+  while (attempts < maxAttempts) {
+    try {
+      const res = await getAnalysisResult(id)
+      if (res.data?.status === 'completed') {
+        analysisResult.value = res.data.result
+        return
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      attempts++
+    } catch (error) {
+      console.error('获取分析结果失败:', error)
+      break
+    }
   }
 }
 </script>

@@ -137,6 +137,7 @@
 import { ref } from 'vue'
 import { Promotion, InfoFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { getExercisePlan } from '../../api/healthManager'
 
 const loading = ref(false)
 const exercisePlan = ref(null)
@@ -165,65 +166,15 @@ const safetyTips = ref([
 ])
 
 const getTypeColor = (type) => {
-  const map = { '有氧': '', '力量': 'success', '柔韧': 'warning', '休息': 'info' }
+  const map = { 'aerobic': '', 'strength': 'success', 'flexibility': 'warning', 'rest': 'info' }
   return map[type] || ''
 }
 
 const generatePlan = async () => {
   loading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 1500))
-
-    exercisePlan.value = {
-      weeklyPlan: [
-        {
-          day: '周一', type: '有氧', duration: '45分钟', calories: 350,
-          exercises: [
-            { name: '跑步机慢跑', sets: 1, reps: '30分钟', rest: 0 },
-            { name: '椭圆机', sets: 1, reps: '15分钟', rest: 0 }
-          ]
-        },
-        {
-          day: '周二', type: '力量', duration: '60分钟', calories: 280,
-          exercises: [
-            { name: '哑铃卧推', sets: 4, reps: '12次', rest: 60 },
-            { name: '杠铃划船', sets: 4, reps: '10次', rest: 60 },
-            { name: '肩推', sets: 3, reps: '12次', rest: 60 }
-          ]
-        },
-        {
-          day: '周三', type: '休息', duration: '-', calories: 0,
-          exercises: [{ name: '轻度拉伸', sets: 1, reps: '15分钟', rest: 0 }]
-        },
-        {
-          day: '周四', type: '力量', duration: '60分钟', calories: 300,
-          exercises: [
-            { name: '深蹲', sets: 4, reps: '10次', rest: 90 },
-            { name: '硬拉', sets: 4, reps: '8次', rest: 90 },
-            { name: '腿举', sets: 3, reps: '12次', rest: 60 }
-          ]
-        },
-        {
-          day: '周五', type: '有氧', duration: '40分钟', calories: 320,
-          exercises: [
-            { name: '动感单车', sets: 1, reps: '25分钟', rest: 0 },
-            { name: '跳绳', sets: 3, reps: '5分钟', rest: 60 }
-          ]
-        },
-        {
-          day: '周六', type: '柔韧', duration: '50分钟', calories: 150,
-          exercises: [
-            { name: '瑜伽基础', sets: 1, reps: '50分钟', rest: 0 }
-          ]
-        },
-        {
-          day: '周日', type: '休息', duration: '-', calories: 0,
-          exercises: [{ name: '户外散步', sets: 1, reps: '30分钟', rest: 0 }]
-        }
-      ],
-      notes: '请根据自身感觉调整运动强度，如有不适请立即停止。建议运动前后各补充200ml水。'
-    }
-
+    const res = await getExercisePlan(exerciseForm.value)
+    exercisePlan.value = res.data
     ElMessage.success('运动方案生成成功')
   } catch (error) {
     ElMessage.error('生成失败: ' + error.message)

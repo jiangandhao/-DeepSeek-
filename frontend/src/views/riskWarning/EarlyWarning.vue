@@ -7,6 +7,9 @@
             <div class="card-header">
               <span>预警通知</span>
               <div>
+                <el-button @click="showDismissed = !showDismissed">
+                  {{ showDismissed ? '隐藏已忽略' : '显示已忽略' }}
+                </el-button>
                 <el-button @click="markAllRead">全部已读</el-button>
                 <el-button type="primary" @click="showSettings">
                   <el-icon><Setting /></el-icon>
@@ -18,20 +21,24 @@
 
           <el-tabs v-model="activeTab">
             <el-tab-pane label="全部预警" name="all">
-              <div v-for="warning in warnings" :key="warning.id" class="warning-item" :class="[warning.level, { unread: !warning.read }]">
+              <div v-if="filteredWarnings.length === 0" class="empty-state">
+                <el-empty description="暂无预警数据" />
+              </div>
+              <div v-for="warning in filteredWarnings" :key="warning.id" class="warning-item" :class="[warning.level, { unread: !warning.read, dismissed: warning.isDismissed }]">
                 <div class="warning-icon">
                   <el-icon :size="24"><component :is="getWarningIcon(warning.level)" /></el-icon>
                 </div>
                 <div class="warning-content">
                   <div class="warning-header">
-                    <el-tag :type="getLevelType(warning.level)" size="small">{{ warning.level }}</el-tag>
+                    <el-tag :type="getLevelType(warning.level)" size="small">{{ getLevelLabel(warning.level) }}</el-tag>
+                    <el-tag v-if="warning.isDismissed" type="info" size="small" style="margin-left: 8px;">已忽略</el-tag>
                     <span class="warning-time">{{ warning.time }}</span>
                   </div>
                   <h4>{{ warning.title }}</h4>
                   <p>{{ warning.content }}</p>
                   <div class="warning-actions">
                     <el-button type="primary" link @click="handleWarning(warning)">查看详情</el-button>
-                    <el-button type="info" link @click="dismissWarning(warning)">忽略</el-button>
+                    <el-button v-if="!warning.isDismissed" type="info" link @click="dismissWarning(warning)">忽略</el-button>
                   </div>
                 </div>
               </div>
@@ -75,14 +82,48 @@
           <template #header>
             <span>预警统计</span>
           </template>
-          <el-descriptions :column="1" border>
-            <el-descriptions-item label="今日预警">
-              <el-badge :value="warningStats.today" :type="warningStats.today > 0 ? 'danger' : 'info'" />
-            </el-descriptions-item>
-            <el-descriptions-item label="本周预警">{{ warningStats.week }}次</el-descriptions-item>
-            <el-descriptions-item label="未处理">{{ warningStats.unread }}次</el-descriptions-item>
-            <el-descriptions-item label="已处理">{{ warningStats.resolved }}次</el-descriptions-item>
-          </el-descriptions>
+          <div class="stats-grid">
+            <div class="stat-item" :class="{ active: activeFilter === 'today' }" @click="filterByStat('today')">
+              <div class="stat-icon-wrap danger">
+                <el-icon><Warning /></el-icon>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value">{{ warningStats.today }}</span>
+                <span class="stat-label">今日预警</span>
+              </div>
+            </div>
+            <div class="stat-item" :class="{ active: activeFilter === 'week' }" @click="filterByStat('week')">
+              <div class="stat-icon-wrap warning">
+                <el-icon><DataLine /></el-icon>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value">{{ warningStats.week }}</span>
+                <span class="stat-label">本周预警</span>
+              </div>
+            </div>
+            <div class="stat-item" :class="{ active: activeFilter === 'unread' }" @click="filterByStat('unread')">
+              <div class="stat-icon-wrap info">
+                <el-icon><Bell /></el-icon>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value">{{ warningStats.unread }}</span>
+                <span class="stat-label">未处理</span>
+              </div>
+            </div>
+            <div class="stat-item" :class="{ active: activeFilter === 'resolved' }" @click="filterByStat('resolved')">
+              <div class="stat-icon-wrap success">
+                <el-icon><CircleCheck /></el-icon>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value">{{ warningStats.resolved }}</span>
+                <span class="stat-label">已处理</span>
+              </div>
+            </div>
+          </div>
+          <div class="filter-hint" v-if="activeFilter">
+            <span>当前筛选: {{ getFilterLabel(activeFilter) }}</span>
+            <el-button type="primary" link @click="clearFilter">清除筛选</el-button>
+          </div>
         </el-card>
 
         <el-card style="margin-top: 20px;">
@@ -112,40 +153,172 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 预警设置对话框 -->
+    <el-dialog v-model="showSettingsDialog" title="预警设置" width="600px">
+      <el-tabs v-model="settingsTab">
+        <el-tab-pane label="阈值设置" name="threshold">
+          <el-form label-width="120px" class="settings-form">
+            <el-form-item label="血糖预警上限">
+              <el-input-number v-model="settingsForm.bloodSugarHigh" :min="5" :max="15" :step="0.1" :precision="1" />
+              <span class="unit-text">mmol/L</span>
+              <span class="hint-text">空腹血糖超过此值将触发预警</span>
+            </el-form-item>
+            <el-form-item label="血糖预警下限">
+              <el-input-number v-model="settingsForm.bloodSugarLow" :min="2" :max="5" :step="0.1" :precision="1" />
+              <span class="unit-text">mmol/L</span>
+              <span class="hint-text">空腹血糖低于此值将触发预警</span>
+            </el-form-item>
+            <el-form-item label="血压预警上限">
+              <el-input-number v-model="settingsForm.bloodPressureHigh" :min="100" :max="200" :step="5" />
+              <span class="unit-text">mmHg</span>
+              <span class="hint-text">收缩压超过此值将触发预警</span>
+            </el-form-item>
+            <el-form-item label="心率预警上限">
+              <el-input-number v-model="settingsForm.heartRateHigh" :min="60" :max="150" :step="5" />
+              <span class="unit-text">bpm</span>
+              <span class="hint-text">静息心率超过此值将触发预警</span>
+            </el-form-item>
+            <el-form-item label="心率预警下限">
+              <el-input-number v-model="settingsForm.heartRateLow" :min="40" :max="60" :step="5" />
+              <span class="unit-text">bpm</span>
+              <span class="hint-text">静息心率低于此值将触发预警</span>
+            </el-form-item>
+            <el-form-item label="BMI预警上限">
+              <el-input-number v-model="settingsForm.bmiHigh" :min="18" :max="40" :step="0.5" :precision="1" />
+              <span class="hint-text">BMI超过此值将触发预警</span>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+        <el-tab-pane label="通知设置" name="notification">
+          <el-form label-width="120px" class="settings-form">
+            <el-form-item label="开启预警通知">
+              <el-switch v-model="settingsForm.enableNotification" />
+            </el-form-item>
+            <el-form-item label="高风险预警">
+              <el-checkbox v-model="settingsForm.notifyHigh">弹窗提醒</el-checkbox>
+              <el-checkbox v-model="settingsForm.notifyHighSound">声音提醒</el-checkbox>
+            </el-form-item>
+            <el-form-item label="中风险预警">
+              <el-checkbox v-model="settingsForm.notifyMedium">弹窗提醒</el-checkbox>
+              <el-checkbox v-model="settingsForm.notifyMediumSound">声音提醒</el-checkbox>
+            </el-form-item>
+            <el-form-item label="低风险预警">
+              <el-checkbox v-model="settingsForm.notifyLow">弹窗提醒</el-checkbox>
+            </el-form-item>
+            <el-form-item label="免打扰时间">
+              <el-time-picker
+                v-model="settingsForm.quietHoursStart"
+                placeholder="开始时间"
+                format="HH:mm"
+                style="width: 120px;"
+              />
+              <span style="margin: 0 10px;">至</span>
+              <el-time-picker
+                v-model="settingsForm.quietHoursEnd"
+                placeholder="结束时间"
+                format="HH:mm"
+                style="width: 120px;"
+              />
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+      </el-tabs>
+      <template #footer>
+        <el-button @click="showSettingsDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveSettings">保存设置</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 预警详情对话框 -->
+    <el-dialog v-model="showDetailDialog" title="预警详情" width="500px">
+      <div v-if="currentWarning" class="warning-detail">
+        <div class="detail-header">
+          <el-tag :type="getLevelType(currentWarning.level)" size="large">
+            {{ getLevelLabel(currentWarning.level) }}
+          </el-tag>
+          <span class="detail-time">{{ currentWarning.time }}</span>
+        </div>
+
+        <h3 class="detail-title">{{ currentWarning.title }}</h3>
+
+        <div class="detail-section">
+          <h4>预警内容</h4>
+          <p>{{ currentWarning.content }}</p>
+        </div>
+
+        <div class="detail-section" v-if="currentWarning.action">
+          <h4>建议措施</h4>
+          <el-alert :title="currentWarning.action" type="warning" :closable="false" show-icon />
+        </div>
+
+        <div class="detail-section">
+          <h4>相关数据</h4>
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="预警类型">{{ getTypeLabel(currentWarning.type) }}</el-descriptions-item>
+            <el-descriptions-item label="风险等级">{{ getLevelLabel(currentWarning.level) }}</el-descriptions-item>
+            <el-descriptions-item label="触发时间">{{ currentWarning.time }}</el-descriptions-item>
+            <el-descriptions-item label="状态">
+              <el-tag :type="currentWarning.read ? 'success' : 'danger'" size="small">
+                {{ currentWarning.read ? '已读' : '未读' }}
+              </el-tag>
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <div class="detail-section">
+          <h4>处理建议</h4>
+          <ul class="suggestion-list">
+            <li>请及时关注相关健康指标</li>
+            <li>如有不适，建议尽快就医</li>
+            <li>可调整生活习惯改善指标</li>
+            <li>定期复查，跟踪健康状况</li>
+          </ul>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showDetailDialog = false">关闭</el-button>
+        <el-button type="info" @click="handleDismiss">忽略预警</el-button>
+        <el-button type="primary" @click="handleMarkRead">标记已读</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { Setting, Bell, CircleCloseFilled, WarningFilled, Warning, InfoFilled } from '@element-plus/icons-vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { Setting, Bell, CircleCloseFilled, Warning, DataLine, CircleCheck } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { getWarnings, markWarningRead, markAllWarningsRead, dismissWarning as dismissWarningApi, getWarningStats, getWarningThresholds, updateWarningThresholds } from '@/api/riskWarning'
+import { useUserStore } from '@/stores/user'
 
+const userStore = useUserStore()
 const activeTab = ref('all')
+const activeFilter = ref(null)
+const showDismissed = ref(false)
+const showDetailDialog = ref(false)
+const currentWarning = ref(null)
+const showSettingsDialog = ref(false)
+const settingsTab = ref('threshold')
 
-const warnings = ref([
-  {
-    id: 1, level: '高风险', title: '血糖严重超标预警',
-    content: '您今日空腹血糖测量值为8.2mmol/L，已超过警戒线。建议立即调整饮食并咨询医生。',
-    action: '建议：1）立即就医；2）严格控制碳水摄入；3）增加运动量',
-    time: '2025-01-10 09:30', read: false
-  },
-  {
-    id: 2, level: '中风险', title: '血压波动预警',
-    content: '近3天血压测量值波动较大（120-158/80-95），建议规律作息并监测血压。',
-    time: '2025-01-10 08:15', read: false
-  },
-  {
-    id: 3, level: '低风险', title: '体重增加提醒',
-    content: '近一个月体重增加2kg，已接近超重上限，建议控制饮食。',
-    time: '2025-01-09 20:00', read: true
-  },
-  {
-    id: 4, level: '中风险', title: '血脂异常提醒',
-    content: '上次体检血脂指标偏高，已超过3个月未复查，建议近期安排复查。',
-    time: '2025-01-08 10:00', read: true
-  }
-])
+const settingsForm = reactive({
+  bloodSugarHigh: 7.0,
+  bloodSugarLow: 3.9,
+  bloodPressureHigh: 140,
+  heartRateHigh: 100,
+  heartRateLow: 50,
+  bmiHigh: 24,
+  enableNotification: true,
+  notifyHigh: true,
+  notifyHighSound: true,
+  notifyMedium: true,
+  notifyMediumSound: false,
+  notifyLow: true,
+  quietHoursStart: null,
+  quietHoursEnd: null
+})
 
+const warnings = ref([])
 const reminders = ref([
   { id: 1, type: 'medication', title: '用药提醒', content: '二甲双胍 500mg - 晚餐后服用', time: '18:00' },
   { id: 2, type: 'exercise', title: '运动提醒', content: '今日还未运动，建议进行30分钟散步', time: '19:00' },
@@ -161,46 +334,284 @@ const thresholds = ref({
 })
 
 const warningStats = ref({
-  today: 2,
-  week: 8,
-  unread: 2,
-  resolved: 15
+  today: 0,
+  week: 0,
+  unread: 0,
+  resolved: 0
 })
 
-const highWarnings = computed(() => warnings.value.filter(w => w.level === '高风险'))
+const highWarnings = computed(() => warnings.value.filter(w => (w.warningLevel || w.level) === 'high'))
+
+// 根据筛选条件过滤预警列表
+const filteredWarnings = computed(() => {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const weekAgo = new Date(today)
+  weekAgo.setDate(weekAgo.getDate() - 7)
+
+  return warnings.value.filter(warning => {
+    // 如果不显示已忽略的预警，则过滤掉
+    if (!showDismissed.value && warning.isDismissed) {
+      return false
+    }
+
+    // 如果没有筛选条件，显示所有预警
+    if (!activeFilter.value) {
+      return true
+    }
+
+    const warningTime = warning.time ? new Date(warning.time.replace(/-/g, '/')) : null
+
+    switch (activeFilter.value) {
+      case 'today':
+        // 筛选今日预警
+        return warningTime && warningTime >= today
+      case 'week':
+        // 筛选本周预警
+        return warningTime && warningTime >= weekAgo
+      case 'unread':
+        // 筛选未处理预警（未忽略）
+        return !warning.isDismissed
+      case 'resolved':
+        // 筛选已处理预警（已忽略）
+        return warning.isDismissed
+      default:
+        return true
+    }
+  })
+})
 
 const getLevelType = (level) => {
-  const map = { '高风险': 'danger', '中风险': 'warning', '低风险': 'info' }
+  const map = { 'high': 'danger', 'medium': 'warning', 'low': 'info' }
   return map[level] || 'info'
 }
 
 const getWarningIcon = (level) => {
-  const map = { '高风险': 'CircleCloseFilled', '中风险': 'WarningFilled', '低风险': 'InfoFilled' }
+  const map = { 'high': 'CircleCloseFilled', 'medium': 'WarningFilled', 'low': 'InfoFilled' }
   return map[level] || 'InfoFilled'
 }
 
-const markAllRead = () => {
-  warnings.value.forEach(w => w.read = true)
-  ElMessage.success('已全部标记为已读')
+const getLevelLabel = (level) => {
+  const map = { 'high': '高风险', 'medium': '中风险', 'low': '低风险' }
+  return map[level] || level
 }
 
-const handleWarning = (warning) => {
-  warning.read = true
-  ElMessage.info(`处理预警: ${warning.title}`)
+const loadWarnings = async () => {
+  try {
+    const params = {
+      includeDismissed: showDismissed.value ? true : undefined
+    }
+    const res = await getWarnings(userStore.userId, params)
+    warnings.value = (res.data || []).map(w => ({
+      ...w,
+      isDismissed: w.dismissed ? 1 : 0
+    }))
+  } catch (error) {
+    console.error('加载预警失败:', error)
+  }
 }
 
-const dismissWarning = (warning) => {
-  warning.read = true
-  ElMessage.success('已忽略')
+const loadWarningStats = async () => {
+  try {
+    const res = await getWarningStats(userStore.userId)
+    warningStats.value = res.data || warningStats.value
+  } catch (error) {
+    console.error('加载预警统计失败:', error)
+  }
+}
+
+const loadThresholds = async () => {
+  try {
+    const res = await getWarningThresholds(userStore.userId)
+    if (res.data) {
+      thresholds.value = res.data
+    }
+  } catch (error) {
+    console.error('加载阈值失败:', error)
+  }
+}
+
+const markAllRead = async () => {
+  try {
+    await markAllWarningsRead(userStore.userId)
+    warnings.value.forEach(w => w.isRead = 1)
+    ElMessage.success('已全部标记为已读')
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
+}
+
+const handleWarning = async (warning) => {
+  currentWarning.value = warning
+  showDetailDialog.value = true
+  // 标记为已读
+  if (!warning.read) {
+    try {
+      await markWarningRead(warning.id)
+      warning.read = true
+      warning.isRead = 1
+    } catch (error) {
+      console.error('标记已读失败:', error)
+    }
+  }
+}
+
+const handleMarkRead = async () => {
+  if (currentWarning.value) {
+    try {
+      await markWarningRead(currentWarning.value.id)
+      currentWarning.value.read = true
+      currentWarning.value.isRead = 1
+      ElMessage.success('已标记为已读')
+      showDetailDialog.value = false
+    } catch (error) {
+      ElMessage.error('操作失败')
+    }
+  }
+}
+
+const handleDismiss = async () => {
+  if (currentWarning.value) {
+    try {
+      await dismissWarningApi(currentWarning.value.id)
+      currentWarning.value.isDismissed = 1
+      ElMessage.success('已忽略该预警')
+      showDetailDialog.value = false
+      // 从列表中移除
+      warnings.value = warnings.value.filter(w => w.id !== currentWarning.value.id)
+    } catch (error) {
+      ElMessage.error('操作失败')
+    }
+  }
+}
+
+const getTypeLabel = (type) => {
+  const map = {
+    'blood_sugar': '血糖预警',
+    'blood_pressure': '血压预警',
+    'heart_rate': '心率预警',
+    'bmi': 'BMI预警',
+    'exercise': '运动提醒',
+    'diet': '饮食提醒',
+    'sleep': '睡眠提醒',
+    'medication': '用药提醒'
+  }
+  return map[type] || type || '健康预警'
+}
+
+const dismissWarning = async (warning) => {
+  try {
+    await dismissWarningApi(warning.id)
+    warning.isDismissed = 1
+    // 重新加载统计数据和预警列表
+    await Promise.all([loadWarningStats(), loadWarnings()])
+    ElMessage.success('已忽略')
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
+}
+
+const filterByStat = (type) => {
+  if (activeFilter.value === type) {
+    activeFilter.value = null
+    activeTab.value = 'all'
+    return
+  }
+  activeFilter.value = type
+  switch (type) {
+    case 'today':
+      // 筛选今日预警
+      activeTab.value = 'all'
+      break
+    case 'week':
+      // 筛选本周预警
+      activeTab.value = 'all'
+      break
+    case 'unread':
+      // 筛选未处理预警
+      activeTab.value = 'all'
+      break
+    case 'resolved':
+      // 筛选已处理预警
+      activeTab.value = 'all'
+      break
+  }
+}
+
+const clearFilter = () => {
+  activeFilter.value = null
+  activeTab.value = 'all'
+}
+
+const getFilterLabel = (filter) => {
+  const map = {
+    'today': '今日预警',
+    'week': '本周预警',
+    'unread': '未处理预警',
+    'resolved': '已处理预警'
+  }
+  return map[filter] || ''
 }
 
 const showSettings = () => {
-  ElMessage.info('打开预警设置')
+  // 将当前阈值设置填充到表单
+  settingsForm.bloodSugarHigh = thresholds.value.bloodSugarHigh || 7.0
+  settingsForm.bloodPressureHigh = thresholds.value.bloodPressureHigh || 140
+  settingsForm.heartRateHigh = thresholds.value.heartRateHigh || 100
+  settingsForm.bmiHigh = thresholds.value.bmiHigh || 24
+  showSettingsDialog.value = true
 }
 
-const saveThresholds = () => {
-  ElMessage.success('预警阈值保存成功')
+const saveSettings = async () => {
+  try {
+    // 保存阈值设置
+    await updateWarningThresholds(userStore.userId, {
+      bloodSugarHigh: settingsForm.bloodSugarHigh,
+      bloodSugarLow: settingsForm.bloodSugarLow,
+      bloodPressureHigh: settingsForm.bloodPressureHigh,
+      heartRateHigh: settingsForm.heartRateHigh,
+      heartRateLow: settingsForm.heartRateLow,
+      bmiHigh: settingsForm.bmiHigh
+    })
+    // 更新本地阈值
+    thresholds.value = {
+      bloodSugarHigh: settingsForm.bloodSugarHigh,
+      bloodSugarLow: settingsForm.bloodSugarLow,
+      bloodPressureHigh: settingsForm.bloodPressureHigh,
+      heartRateHigh: settingsForm.heartRateHigh,
+      heartRateLow: settingsForm.heartRateLow,
+      bmiHigh: settingsForm.bmiHigh
+    }
+    showSettingsDialog.value = false
+    ElMessage.success('预警设置保存成功')
+  } catch (error) {
+    ElMessage.error('保存失败')
+  }
 }
+
+const saveThresholds = async () => {
+  try {
+    await updateWarningThresholds(userStore.userId, thresholds.value)
+    ElMessage.success('预警阈值保存成功')
+  } catch (error) {
+    ElMessage.error('保存失败')
+  }
+}
+
+// 监听 showDismissed 变化，重新加载预警列表
+watch(showDismissed, () => {
+  loadWarnings()
+})
+
+onMounted(async () => {
+  // 等待用户信息加载完成
+  if (!userStore.userId && userStore.token) {
+    await userStore.fetchUserInfo()
+  }
+  loadWarnings()
+  loadWarningStats()
+  loadThresholds()
+})
 </script>
 
 <style scoped>
@@ -227,6 +638,10 @@ const saveThresholds = () => {
 .warning-item.high {
   background: #fef0f0;
   border-left: 3px solid #F56C6C;
+}
+.warning-item.dismissed {
+  opacity: 0.6;
+  background: #f5f5f5;
 }
 .warning-icon {
   flex-shrink: 0;
@@ -288,5 +703,176 @@ const saveThresholds = () => {
 .reminder-time {
   color: #999;
   font-size: 12px;
+}
+
+/* 预警详情对话框样式 */
+.warning-detail {
+  padding: 10px 0;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.detail-time {
+  color: #999;
+  font-size: 14px;
+}
+
+.detail-title {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.detail-section {
+  margin-bottom: 20px;
+}
+
+.detail-section h4 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  color: #666;
+  font-weight: 600;
+}
+
+.detail-section p {
+  margin: 0;
+  color: #333;
+  line-height: 1.6;
+}
+
+.suggestion-list {
+  margin: 0;
+  padding-left: 20px;
+  color: #666;
+}
+
+.suggestion-list li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.suggestion-list li:last-child {
+  margin-bottom: 0;
+}
+
+/* 预警设置对话框样式 */
+.settings-form {
+  padding: 10px 0;
+}
+
+.settings-form .el-form-item {
+  margin-bottom: 20px;
+}
+
+.unit-text {
+  margin-left: 8px;
+  color: #909399;
+  font-size: 13px;
+}
+
+.hint-text {
+  display: block;
+  margin-top: 4px;
+  color: #C0C4CC;
+  font-size: 12px;
+}
+
+/* 预警统计卡片样式 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f5f7fa;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.stat-item:hover {
+  background: #ecf5ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.stat-item.active {
+  border-color: #409EFF;
+  background: #ecf5ff;
+}
+
+.stat-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.stat-icon-wrap.danger {
+  background: #fef0f0;
+  color: #F56C6C;
+}
+
+.stat-icon-wrap.warning {
+  background: #fdf6ec;
+  color: #E6A23C;
+}
+
+.stat-icon-wrap.info {
+  background: #ecf5ff;
+  color: #409EFF;
+}
+
+.stat-icon-wrap.success {
+  background: #f0f9eb;
+  color: #67C23A;
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #303133;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+.filter-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: #ecf5ff;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #409EFF;
+}
+
+.empty-state {
+  padding: 40px 0;
 }
 </style>

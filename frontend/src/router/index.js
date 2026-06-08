@@ -46,6 +46,18 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/blood-sugar/blood-pressure',
+    name: 'BloodPressure',
+    component: () => import('../views/bloodSugar/BloodPressure.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/blood-sugar/weight',
+    name: 'WeightRecord',
+    component: () => import('../views/bloodSugar/WeightRecord.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/health-manager',
     name: 'HealthManager',
     component: () => import('../views/healthManager/RiskAssessment.vue'),
@@ -61,6 +73,12 @@ const routes = [
     path: '/health-manager/exercise',
     name: 'ExerciseRecommend',
     component: () => import('../views/healthManager/ExerciseRecommend.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/health-manager/disease',
+    name: 'DiseaseManagement',
+    component: () => import('../views/healthManager/DiseaseManagement.vue'),
     meta: { requiresAuth: true }
   },
   {
@@ -104,6 +122,11 @@ const routes = [
     name: 'Profile',
     component: () => import('../views/common/UserProfile.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('../views/common/NotFound.vue')
   }
 ]
 

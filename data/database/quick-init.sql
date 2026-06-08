@@ -152,9 +152,9 @@ INSERT INTO blood_sugar_records (user_id, value, type, measure_time, note) VALUE
 
 -- Insert warning records
 INSERT INTO warning_records (user_id, warning_type, warning_level, title, content, is_read) VALUES
-(1, 'blood_sugar', 'high', 'blood sugar warning', 'fasting blood sugar 8.2mmol/L exceeds threshold', 0),
-(1, 'blood_pressure', 'medium', 'blood pressure warning', 'blood pressure fluctuation detected', 0),
-(1, 'weight', 'low', 'weight reminder', 'weight increased 2kg in last month', 1);
+(1, 'blood_sugar', 'high', '血糖严重超标预警', '您今日空腹血糖测量值为8.2mmol/L，已超过警戒线。', 0),
+(1, 'blood_pressure', 'medium', '血压波动预警', '近3天血压测量值波动较大', 0),
+(1, 'weight', 'low', '体重增加提醒', '近一个月体重增加2kg', 1);
 
 -- Insert warning thresholds
 INSERT INTO warning_thresholds (user_id, threshold_type, threshold_value, unit) VALUES
@@ -165,6 +165,6 @@ INSERT INTO warning_thresholds (user_id, threshold_type, threshold_value, unit) 
 
 -- Insert health goals
 INSERT INTO health_goals (user_id, goal_name, target_value, current_value, progress, status) VALUES
-(1, 'fasting blood sugar', 6.0, 5.9, 90, 1),
-(1, 'weight control', 65.0, 70.0, 30, 0),
-(1, 'blood pressure', 130.0, 135.0, 60, 0);
+(1, '血糖达标', 6.0, 5.9, 90, 1),
+(1, '体重控制', 65.0, 70.0, 30, 0),
+(1, '血压稳定', 130.0, 135.0, 60, 0);

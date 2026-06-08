@@ -188,9 +188,11 @@
 import { ref, computed } from 'vue'
 import { Warning } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { getHealthRiskAssessment } from '../../api/healthManager'
 
 const loading = ref(false)
 const result = ref(null)
+const userId = ref(1) // 从登录状态获取
 
 const assessmentForm = ref({
   age: 30,
@@ -216,71 +218,26 @@ const bmi = computed(() => {
 })
 
 const getRiskType = (level) => {
-  const map = { '低风险': 'success', '中风险': 'warning', '高风险': 'danger' }
+  const map = { 'low': 'success', 'medium': 'warning', 'high': 'danger' }
   return map[level] || 'info'
 }
 
 const getRiskColor = (level) => {
-  const map = { '低风险': '#67C23A', '中风险': '#E6A23C', '高风险': '#F56C6C' }
+  const map = { 'low': '#67C23A', 'medium': '#E6A23C', 'high': '#F56C6C' }
   return map[level] || '#909399'
 }
 
 const startAssessment = async () => {
   loading.value = true
   try {
-    // 模拟AI评估 - 实际调用后端API
-    await new Promise(resolve => setTimeout(resolve, 1500))
-
-    const bmiVal = parseFloat(bmi.value)
-    let totalScore = 0
-    const risks = []
-
-    // BMI风险
-    if (bmiVal > 28) totalScore += 20
-    else if (bmiVal > 24) totalScore += 10
-
-    // 血压风险
-    if (assessmentForm.value.systolicBP > 140) totalScore += 15
-    if (assessmentForm.value.diastolicBP > 90) totalScore += 10
-
-    // 血糖风险
-    if (assessmentForm.value.bloodSugar > 7.0) totalScore += 20
-    else if (assessmentForm.value.bloodSugar > 6.1) totalScore += 10
-
-    // 家族史风险
-    totalScore += assessmentForm.value.familyHistory.length * 5
-
-    // 生成疾病风险
-    risks.push({
-      disease: '心血管疾病',
-      level: totalScore > 30 ? '高风险' : totalScore > 15 ? '中风险' : '低风险',
-      probability: Math.min(95, totalScore * 2 + 10)
-    })
-    risks.push({
-      disease: '糖尿病',
-      level: assessmentForm.value.bloodSugar > 6.1 ? '高风险' : '低风险',
-      probability: assessmentForm.value.bloodSugar > 6.1 ? 75 : 20
-    })
-    risks.push({
-      disease: '高血压',
-      level: assessmentForm.value.systolicBP > 140 ? '高风险' : '低风险',
-      probability: assessmentForm.value.systolicBP > 140 ? 80 : 15
-    })
-
-    const suggestions = []
-    if (bmiVal > 24) suggestions.push('建议控制饮食，适当增加运动量，将BMI控制在正常范围')
-    if (assessmentForm.value.systolicBP > 130) suggestions.push('注意低盐饮食，定期监测血压')
-    if (assessmentForm.value.bloodSugar > 6.1) suggestions.push('减少糖分摄入，定期检查血糖')
-    if (assessmentForm.value.smoking !== 'never') suggestions.push('建议戒烟，减少心血管疾病风险')
-    suggestions.push('保持规律作息，每年定期体检')
-
-    result.value = {
-      score: totalScore,
-      level: totalScore > 30 ? 'high' : totalScore > 15 ? 'medium' : 'low',
-      levelText: totalScore > 30 ? '高风险' : totalScore > 15 ? '中风险' : '低风险',
-      risks,
-      suggestions
+    const data = {
+      userId: userId.value,
+      ...assessmentForm.value,
+      bmi: parseFloat(bmi.value)
     }
+
+    const res = await getHealthRiskAssessment(data)
+    result.value = res.data
 
     ElMessage.success('评估完成')
   } catch (error) {

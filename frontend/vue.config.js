@@ -8,6 +8,17 @@ module.exports = defineConfig({
         target: 'http://localhost:8081',
         changeOrigin: true
       }
+    },
+    client: {
+      overlay: {
+        runtimeErrors: (error) => {
+          // 屏蔽 ResizeObserver 无害警告
+          if (error.message === 'ResizeObserver loop completed with undelivered notifications.') {
+            return false
+          }
+          return true
+        }
+      }
     }
   }
 })

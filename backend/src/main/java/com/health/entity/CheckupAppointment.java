@@ -2,6 +2,7 @@ package com.health.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
@@ -10,8 +11,10 @@ public class CheckupAppointment {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long userId;
+    private String packageName;
+    private String centerName;
     private String hospitalName;
-    private LocalDateTime appointmentDate;
+    private LocalDate appointmentDate;
     private String appointmentTime;
     private String checkupItems;
     private Integer status;
