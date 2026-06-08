@@ -1,0 +1,20 @@
+# Web 框架
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# HTTP 客户端(调用 DeepSeek)。[socks] 支持环境中存在 SOCKS 代理的情况
+httpx[socks]==0.28.1
+
+# 阶段2 预测/异常检测
+numpy==2.2.0
+pandas==2.2.3
+
+# 阶段4 影像识别(轻量演示:Pillow + numpy;可升级为 torch/MONAI 真实模型)
+pillow==11.0.0
+python-multipart==0.0.20
+
+# 阶段3 RAG(按需安装,体积较大,首期可注释)
+# chromadb==0.5.23
+# sentence-transformers==3.3.1

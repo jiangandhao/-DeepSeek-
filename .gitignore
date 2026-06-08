@@ -1,0 +1,42 @@
+# ---- 通用 ----
+.env
+*.log
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# ---- Java / Maven ----
+backend/target/
+backend/.mvn/
+backend/!.mvn/wrapper/maven-wrapper.jar
+backend/HELP.md
+
+# ---- Node / Vue ----
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-error.log*
+
+# ---- Python ----
+ai-service/__pycache__/
+ai-service/**/__pycache__/
+ai-service/.venv/
+ai-service/venv/
+*.pyc
+ai-service/.pytest_cache/
+ai-service/chroma_db/
+ai-service/.ipynb_checkpoints/
+
+# ---- 压测 / 测试产物 ----
+*.jtl
+deploy/report/
+ai-service/.pytest_cache/
+ai-service/tests/__pycache__/
+
+# ---- 数据 / 模型产物 ----
+ai-service/data/*.csv
+!ai-service/data/.gitkeep
+ai-service/**/*.pt
+ai-service/**/*.pkl
